@@ -3,6 +3,7 @@ import { StatusPanel } from './StatusPanel'
 import { StoryLog } from './StoryLog'
 import { ActionInput } from './ActionInput'
 import { TokenDisplay } from './TokenDisplay'
+import { ImmersionLoading } from './ImmersionLoading'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, Sun, Moon } from 'lucide-react'
 import { useSettingsStore } from '@/stores/useSettingsStore'
@@ -111,6 +112,9 @@ export function GameScreen({
 
       {/* Token 统计 - 悬浮显示 */}
       <TokenDisplay position="bottom-right" />
+
+      {/* 沉浸式加载 - 剧情推演中 */}
+      <ImmersionLoading isLoading={isLoading} type="story" />
     </div>
   )
 }

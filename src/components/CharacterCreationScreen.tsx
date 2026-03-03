@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { TokenDisplay } from './TokenDisplay'
-import { ArrowLeft, ArrowRight, Check, Loader2, RefreshCw, Heart, Zap, Sword, Shield, Wind, Sparkles } from 'lucide-react'
+import { ImmersionLoading, MiniLoading } from './ImmersionLoading'
+import { ArrowLeft, ArrowRight, Check, RefreshCw, Heart, Zap, Sword, Shield, Wind, Sparkles } from 'lucide-react'
 import type { Player } from '@/types/game'
 import type { GameService } from '@/services/gameService'
 import { toast } from 'sonner'
@@ -255,7 +256,7 @@ export function CharacterCreationScreen({
                     className="btn-jade px-8 rounded-xl tracking-widest disabled:opacity-40"
                   >
                     {isLoading ? (
-                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />天机推演中…</>
+                      <MiniLoading isLoading={true} text="推演中..." />
                     ) : (
                       <>下一步<ArrowRight className="w-4 h-4 ml-2" /></>
                     )}
@@ -296,7 +297,7 @@ export function CharacterCreationScreen({
                     className="btn-jade px-8 rounded-xl tracking-widest disabled:opacity-40"
                   >
                     {isLoading ? (
-                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />天机推演中…</>
+                      <MiniLoading isLoading={true} text="推演中..." />
                     ) : (
                       <>下一步<ArrowRight className="w-4 h-4 ml-2" /></>
                     )}
@@ -370,6 +371,9 @@ export function CharacterCreationScreen({
 
       {/* Token 统计 - 悬浮显示 */}
       <TokenDisplay position="bottom-right" />
+
+      {/* 沉浸式加载 */}
+      <ImmersionLoading isLoading={isLoading} type="character" />
     </div>
   )
 }

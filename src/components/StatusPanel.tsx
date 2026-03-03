@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Sword, Shield, Zap, Heart, Sparkles, Users, BookOpen, Package } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Sword, Shield, Zap, Heart, Sparkles, Users, BookOpen, Package, ChevronUp } from 'lucide-react'
 import type { Player, Skill, Item, Relationship } from '@/types/game'
 
 interface StatusPanelProps {
@@ -11,13 +12,100 @@ interface StatusPanelProps {
 type TabType = 'stats' | 'inventory' | 'skills' | 'relationships'
 
 export function StatusPanel({ player }: StatusPanelProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('stats')
+  const [dialogOpen, setDialogOpen] = useState(false)
 
   const cultivationPercent = player.cultivationProgress
   const lifespanPercent = (player.lifespan / player.maxLifespan) * 100
 
+  // 移动端简化版内容
+  const MobileCompactView = () => (
+    <div className="p-3 space-y-3">
+      {/* 核心信息行 */}
+      <div className="flex items-center gap-3">
+        <div className="relative">
+          <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-2xl">
+            {player.avatar}
+          </div>
+          <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-background" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-foreground tracking-wide truncate">{player.name}</div>
+          <div className="text-xs text-emerald-400 mt-0.5 tracking-wider">
+            {player.realm} · {player.minorRealm}
+          </div>
+          <div className="text-[10px] text-[hsl(var(--dim))] mt-0.5 truncate">
+            {Math.floor(player.age)} 岁 · 寿元 {Math.floor(player.lifespan)}
+          </div>
+        </div>
+        {/* 展开按钮 */}
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <button className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-colors">
+              <ChevronUp className="w-4 h-4" />
+            </button>
+          </DialogTrigger>
+          <DialogContent className="max-w-sm max-h-[85vh] overflow-hidden p-0 gap-0 bg-background/95 backdrop-blur-sm">
+            <DialogHeader className="p-4 pb-0">
+              <DialogTitle className="text-center jade-text tracking-wider">修士详情</DialogTitle>
+            </DialogHeader>
+            <div className="overflow-y-auto p-4">
+              <FullStatusContent player={player} />
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* 核心进度条 - 横向排列节省空间 */}
+      <div className="grid grid-cols-2 gap-2">
+        <CompactStatBar
+          label="修为"
+          value={cultivationPercent}
+          display={`${cultivationPercent.toFixed(0)}%`}
+          colorClass="progress-jade"
+        />
+        <CompactStatBar
+          label="寿元"
+          value={lifespanPercent}
+          display={`${Math.floor(player.lifespan)}`}
+          colorClass={lifespanPercent < 20 ? 'bg-red-500' : 'bg-amber-500'}
+          warning={lifespanPercent < 20}
+        />
+      </div>
+
+      {/* 快捷属性标签 */}
+      <div className="flex flex-wrap gap-1.5">
+        <MiniTag icon={<Heart className="w-3 h-3" />} value={player.health} max={player.maxHealth} color="text-red-400" />
+        <MiniTag icon={<Zap className="w-3 h-3" />} value={player.spiritualPower} max={player.maxSpiritualPower} color="text-blue-400" />
+        <MiniTag icon={<Sword className="w-3 h-3" />} value={player.attack} label="攻" />
+        <MiniTag icon={<Shield className="w-3 h-3" />} value={player.defense} label="防" />
+        <MiniTag icon={<Sparkles className="w-3 h-3" />} value={player.luck} label="运" />
+      </div>
+    </div>
+  )
+
   return (
-    <div className="ink-card rounded-xl border border-[hsl(var(--ink-border))] h-full flex flex-col overflow-hidden">
+    <>
+      {/* 桌面端：完整面板 */}
+      <div className="hidden lg:flex ink-card rounded-xl border border-[hsl(var(--ink-border))] h-full flex-col overflow-hidden">
+        <FullStatusContent player={player} />
+      </div>
+
+      {/* 移动端：简化面板 */}
+      <div className="lg:hidden ink-card rounded-xl border border-[hsl(var(--ink-border))]">
+        <MobileCompactView />
+      </div>
+    </>
+  )
+}
+
+// 完整状态内容（桌面端直接显示，移动端弹窗显示）
+function FullStatusContent({ player }: { player: Player }) {
+  const [activeTab, setActiveTab] = useState<TabType>('stats')
+  const cultivationPercent = player.cultivationProgress
+  const lifespanPercent = (player.lifespan / player.maxLifespan) * 100
+
+  return (
+    <>
       {/* 角色头部 */}
       <div className="p-4 border-b border-[hsl(var(--ink-border))] flex-shrink-0">
         <div className="flex items-center gap-3">
@@ -92,6 +180,47 @@ export function StatusPanel({ player }: StatusPanelProps) {
           </TabsContent>
         </div>
       </Tabs>
+    </>
+  )
+}
+
+// 移动端简化进度条
+function CompactStatBar({
+  label, value, display, colorClass, warning,
+}: {
+  label: string
+  value: number
+  display: string
+  colorClass: string
+  warning?: boolean
+}) {
+  const percentage = Math.min(100, Math.max(0, value))
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between text-[10px]">
+        <span className="text-[hsl(var(--dim))]">{label}</span>
+        <span className={warning ? 'text-red-400' : 'text-foreground/80'}>{display}</span>
+      </div>
+      <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+        <motion.div
+          className={`h-full rounded-full ${colorClass}`}
+          initial={{ width: 0 }}
+          animate={{ width: `${percentage}%` }}
+          transition={{ duration: 0.8, ease: 'easeOut' }}
+        />
+      </div>
+    </div>
+  )
+}
+
+// 移动端迷你标签
+function MiniTag({ icon, value, max, label, color }: { icon: React.ReactNode; value: number; max?: number; label?: string; color?: string }) {
+  return (
+    <div className="flex items-center gap-1 px-2 py-1 bg-white/5 rounded text-[10px] text-[hsl(var(--dim))]">
+      <span className={color || ''}>{icon}</span>
+      <span className={color || 'text-foreground/70'}>
+        {label || value}{max ? `/${max}` : ''}
+      </span>
     </div>
   )
 }

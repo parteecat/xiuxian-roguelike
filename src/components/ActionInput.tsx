@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Send, Loader2, Sparkles } from 'lucide-react'
+import { Send, Sparkles } from 'lucide-react'
+import { InlineLoading } from './ImmersionLoading'
 
 interface ActionInputProps {
   onSubmit: (action: string) => void
@@ -36,13 +37,14 @@ export function ActionInput({ onSubmit, isLoading, suggestions = [] }: ActionInp
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.2 }}
-            className="space-y-2 overflow-hidden"
+            className="space-y-2"
           >
             <div className="flex items-center gap-1.5 text-xs text-[hsl(var(--dim))]">
               <Sparkles className="w-3 h-3 text-emerald-500/60" />
               <span className="tracking-wider">天道推演建议</span>
             </div>
-            <div className="flex flex-wrap gap-1.5">
+            {/* 桌面端：换行显示 | 移动端：横向滚动 */}
+            <div className="hidden sm:flex sm:flex-wrap gap-1.5">
               {suggestions.map((suggestion, i) => (
                 <motion.button
                   key={i}
@@ -58,6 +60,27 @@ export function ActionInput({ onSubmit, isLoading, suggestions = [] }: ActionInp
                     rounded-full transition-all duration-200 disabled:opacity-40 tracking-wide"
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
+                >
+                  {suggestion}
+                </motion.button>
+              ))}
+            </div>
+            {/* 移动端：横向滚动，节省垂直空间 */}
+            <div className="flex sm:hidden gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+              {suggestions.map((suggestion, i) => (
+                <motion.button
+                  key={i}
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  onClick={() => !isLoading && onSubmit(suggestion)}
+                  disabled={isLoading}
+                  className="text-xs px-3 py-1.5 flex-shrink-0
+                    bg-emerald-500/5 hover:bg-emerald-500/15
+                    text-[hsl(var(--dim))] hover:text-emerald-400
+                    border border-emerald-500/10 hover:border-emerald-500/30
+                    rounded-full transition-all duration-200 disabled:opacity-40 tracking-wide"
+                  whileTap={{ scale: 0.95 }}
                 >
                   {suggestion}
                 </motion.button>
@@ -88,7 +111,13 @@ export function ActionInput({ onSubmit, isLoading, suggestions = [] }: ActionInp
             className="h-[52px] w-12 p-0 btn-jade rounded-lg disabled:opacity-40 disabled:transform-none"
           >
             {isLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <span className="relative flex h-4 w-4">
+                <motion.span
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                  className="absolute inset-0 rounded-full border-2 border-white/30 border-t-white"
+                />
+              </span>
             ) : (
               <Send className="w-4 h-4" />
             )}
@@ -96,8 +125,20 @@ export function ActionInput({ onSubmit, isLoading, suggestions = [] }: ActionInp
         </motion.div>
       </div>
 
-      <div className="text-xs text-[hsl(var(--dim))]/40 text-center tracking-wider">
-        Enter 发送 · Shift+Enter 换行
+      {/* 底部提示 */}
+      <div className="flex items-center justify-between text-xs text-[hsl(var(--dim))]/40">
+        <span className="tracking-wider">
+          {isLoading ? <InlineLoading /> : 'Enter 发送 · Shift+Enter 换行'}
+        </span>
+        {isLoading && (
+          <motion.span
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-[10px] text-emerald-500/50 tracking-wider"
+          >
+            请稍候...
+          </motion.span>
+        )}
       </div>
     </div>
   )
