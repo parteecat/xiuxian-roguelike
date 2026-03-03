@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { TokenDisplay } from './TokenDisplay'
 import { ArrowLeft, ArrowRight, Check, Loader2, RefreshCw, Heart, Zap, Sword, Shield, Wind, Sparkles } from 'lucide-react'
 import type { Player } from '@/types/game'
 import type { GameService } from '@/services/gameService'
@@ -366,6 +367,9 @@ export function CharacterCreationScreen({
           </motion.div>
         </AnimatePresence>
       </div>
+
+      {/* Token 统计 - 悬浮显示 */}
+      <TokenDisplay position="bottom-right" />
     </div>
   )
 }

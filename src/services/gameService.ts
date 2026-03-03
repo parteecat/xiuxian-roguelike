@@ -2,6 +2,7 @@
 import { LLMService } from './llmService'
 import { MemoryService } from './memoryService'
 import { db } from './db'
+import { useTokenStore } from '@/stores/useTokenStore'
 import { characterSystemPrompt, characterGenerationPrompt } from '@/prompts/character'
 import { storySystemPrompt, storyGenerationPrompt } from '@/prompts/story'
 import type { Player, GameLog, NPC, Item, Skill, GameState, Time } from '@/types/game'
@@ -59,6 +60,16 @@ export class GameService {
     this.memoryService = new MemoryService(this.llmService, saveId)
   }
 
+  // 记录 token 使用量
+  private recordTokenUsage(usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | undefined) {
+    if (!usage) return
+    useTokenStore.getState().addUsage({
+      promptTokens: usage.prompt_tokens,
+      completionTokens: usage.completion_tokens,
+      totalTokens: usage.total_tokens,
+    })
+  }
+
   // 生成角色
   async generateCharacters(): Promise<Player[]> {
     const messages = [
@@ -70,6 +81,9 @@ export class GameService {
       temperature: 0.8,
       response_format: { type: 'json_object' },
     })
+
+    // 记录 token 使用量
+    this.recordTokenUsage(response.usage)
 
     const result: GeneratedCharacter = JSON.parse(response.content)
     
@@ -164,6 +178,10 @@ export class GameService {
       temperature: 0.9,
       response_format: { type: 'json_object' },
     })
+
+    // 记录 token 使用量
+    this.recordTokenUsage(response.usage)
+
     return JSON.parse(response.content)
   }
 
@@ -189,6 +207,10 @@ export class GameService {
       temperature: 0.9,
       response_format: { type: 'json_object' },
     })
+
+    // 记录 token 使用量
+    this.recordTokenUsage(response.usage)
+
     return JSON.parse(response.content)
   }
 
@@ -249,6 +271,9 @@ export class GameService {
       temperature: 0.7,
       response_format: { type: 'json_object' },
     })
+
+    // 记录 token 使用量
+    this.recordTokenUsage(response.usage)
 
     const result: StoryResult = JSON.parse(response.content)
 
