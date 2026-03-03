@@ -20,6 +20,13 @@ export function StartScreen({ onStart, onContinue }: StartScreenProps) {
   const [showConfirmNew, setShowConfirmNew] = useState(false)
   const [showNoModel, setShowNoModel] = useState(false)
 
+  // 数据容错处理
+  const safeAge = player?.age ?? 18
+  const safeLifespan = player?.lifespan ?? 120
+  const safeMaxLifespan = player?.maxLifespan ?? 120
+  const safeRealm = player?.realm ?? '炼气期'
+  const safeMinorRealm = player?.minorRealm ?? '初期'
+
   const isModelConfigured = () =>
     !!(llmConfig.baseURL && llmConfig.apiKey && llmConfig.model)
 
@@ -154,10 +161,10 @@ export function StartScreen({ onStart, onContinue }: StartScreenProps) {
                 <div className="flex-1 text-left">
                   <div className="font-semibold text-foreground tracking-wide">{player.name}</div>
                   <div className="text-sm text-emerald-400 mt-0.5 tracking-wider">
-                    {player.realm} · {player.minorRealm}
+                    {safeRealm} · {safeMinorRealm}
                   </div>
                   <div className="text-xs text-[hsl(var(--dim))] mt-1">
-                    第 {Math.floor(player.age)} 年 · 寿元 {Math.floor(player.lifespan)}/{player.maxLifespan}
+                    第 {Math.floor(safeAge)} 年 · 寿元 {Math.floor(safeLifespan)}/{safeMaxLifespan}
                   </div>
                 </div>
                 {lastSavedAt && (

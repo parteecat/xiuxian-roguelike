@@ -29,6 +29,12 @@ export function GameScreen({
   onReturnHome,
 }: GameScreenProps) {
   const { theme, setTheme } = useSettingsStore()
+
+  // 数据容错处理
+  const safeAge = player?.age ?? 18
+  const safeRealm = player?.realm ?? '炼气期'
+  const safeMinorRealm = player?.minorRealm ?? '初期'
+
   return (
     <div className="min-h-screen xian-bg text-foreground">
       <div className="max-w-7xl mx-auto p-3 md:p-5 h-screen flex flex-col">
@@ -57,7 +63,7 @@ export function GameScreen({
                 <span className="text-[hsl(var(--dim))] font-normal text-sm ml-2">· 修仙录</span>
               </h1>
               <p className="text-xs text-[hsl(var(--dim))] tracking-wider">
-                {world?.currentLocation || '未知之地'} · 第 {Math.floor(player.age)} 年
+                {world?.currentLocation || '未知之地'} · 第 {Math.floor(safeAge)} 年
               </p>
             </div>
           </div>
@@ -66,7 +72,7 @@ export function GameScreen({
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 px-3 py-1 ink-card rounded-full border border-[hsl(var(--ink-border))]">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-emerald-400 tracking-wider text-xs">{player.realm}·{player.minorRealm}</span>
+              <span className="text-emerald-400 tracking-wider text-xs">{safeRealm}·{safeMinorRealm}</span>
             </div>
             <button
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}

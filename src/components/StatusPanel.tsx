@@ -14,8 +14,28 @@ type TabType = 'stats' | 'inventory' | 'skills' | 'relationships'
 export function StatusPanel({ player }: StatusPanelProps) {
   const [dialogOpen, setDialogOpen] = useState(false)
 
-  const cultivationPercent = player.cultivationProgress
-  const lifespanPercent = (player.lifespan / player.maxLifespan) * 100
+  // 数据容错处理，防止热更新后数据丢失导致 NaN
+  const safePlayer = {
+    ...player,
+    age: player?.age ?? 18,
+    lifespan: player?.lifespan ?? 120,
+    maxLifespan: player?.maxLifespan ?? 120,
+    cultivationProgress: player?.cultivationProgress ?? 0,
+    health: player?.health ?? 100,
+    maxHealth: player?.maxHealth ?? 100,
+    spiritualPower: player?.spiritualPower ?? 100,
+    maxSpiritualPower: player?.maxSpiritualPower ?? 100,
+    attack: player?.attack ?? 10,
+    defense: player?.defense ?? 10,
+    speed: player?.speed ?? 10,
+    luck: player?.luck ?? 10,
+    rootBone: player?.rootBone ?? 10,
+    comprehension: player?.comprehension ?? 10,
+  }
+
+  const cultivationPercent = safePlayer.cultivationProgress
+  // 寿元进度条：从0开始，寿元耗尽时达到100%
+  const lifespanConsumedPercent = ((safePlayer.maxLifespan - safePlayer.lifespan) / safePlayer.maxLifespan) * 100
 
   // 移动端简化版内容
   const MobileCompactView = () => (
@@ -24,17 +44,17 @@ export function StatusPanel({ player }: StatusPanelProps) {
       <div className="flex items-center gap-3">
         <div className="relative">
           <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-2xl">
-            {player.avatar}
+            {safePlayer.avatar}
           </div>
           <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-background" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="font-semibold text-foreground tracking-wide truncate">{player.name}</div>
+          <div className="font-semibold text-foreground tracking-wide truncate">{safePlayer.name}</div>
           <div className="text-xs text-emerald-400 mt-0.5 tracking-wider">
-            {player.realm} · {player.minorRealm}
+            {safePlayer.realm} · {safePlayer.minorRealm}
           </div>
           <div className="text-[10px] text-[hsl(var(--dim))] mt-0.5 truncate">
-            {Math.floor(player.age)} 岁 · 寿元 {Math.floor(player.lifespan)}
+            {Math.floor(safePlayer.age)} 岁 · 寿元 {Math.floor(safePlayer.lifespan)}
           </div>
         </div>
         {/* 展开按钮 */}
@@ -49,7 +69,7 @@ export function StatusPanel({ player }: StatusPanelProps) {
               <DialogTitle className="text-center jade-text tracking-wider">修士详情</DialogTitle>
             </DialogHeader>
             <div className="overflow-y-auto p-4">
-              <FullStatusContent player={player} />
+              <FullStatusContent player={safePlayer} />
             </div>
           </DialogContent>
         </Dialog>
@@ -65,20 +85,20 @@ export function StatusPanel({ player }: StatusPanelProps) {
         />
         <CompactStatBar
           label="寿元"
-          value={lifespanPercent}
-          display={`${Math.floor(player.lifespan)}`}
-          colorClass={lifespanPercent < 20 ? 'bg-red-500' : 'bg-amber-500'}
-          warning={lifespanPercent < 20}
+          value={lifespanConsumedPercent}
+          display={`${Math.floor(safePlayer.lifespan)}/${safePlayer.maxLifespan}`}
+          colorClass={lifespanConsumedPercent > 80 ? 'bg-red-500' : 'bg-amber-500'}
+          warning={lifespanConsumedPercent > 80}
         />
       </div>
 
       {/* 快捷属性标签 */}
       <div className="flex flex-wrap gap-1.5">
-        <MiniTag icon={<Heart className="w-3 h-3" />} value={player.health} max={player.maxHealth} color="text-red-400" />
-        <MiniTag icon={<Zap className="w-3 h-3" />} value={player.spiritualPower} max={player.maxSpiritualPower} color="text-blue-400" />
-        <MiniTag icon={<Sword className="w-3 h-3" />} value={player.attack} label="攻" />
-        <MiniTag icon={<Shield className="w-3 h-3" />} value={player.defense} label="防" />
-        <MiniTag icon={<Sparkles className="w-3 h-3" />} value={player.luck} label="运" />
+        <MiniTag icon={<Heart className="w-3 h-3" />} value={safePlayer.health} max={safePlayer.maxHealth} color="text-red-400" />
+        <MiniTag icon={<Zap className="w-3 h-3" />} value={safePlayer.spiritualPower} max={safePlayer.maxSpiritualPower} color="text-blue-400" />
+        <MiniTag icon={<Sword className="w-3 h-3" />} value={safePlayer.attack} label="攻" />
+        <MiniTag icon={<Shield className="w-3 h-3" />} value={safePlayer.defense} label="防" />
+        <MiniTag icon={<Sparkles className="w-3 h-3" />} value={safePlayer.luck} label="运" />
       </div>
     </div>
   )
@@ -87,7 +107,7 @@ export function StatusPanel({ player }: StatusPanelProps) {
     <>
       {/* 桌面端：完整面板 */}
       <div className="hidden lg:flex ink-card rounded-xl border border-[hsl(var(--ink-border))] h-full flex-col overflow-hidden">
-        <FullStatusContent player={player} />
+        <FullStatusContent player={safePlayer} />
       </div>
 
       {/* 移动端：简化面板 */}
@@ -102,7 +122,8 @@ export function StatusPanel({ player }: StatusPanelProps) {
 function FullStatusContent({ player }: { player: Player }) {
   const [activeTab, setActiveTab] = useState<TabType>('stats')
   const cultivationPercent = player.cultivationProgress
-  const lifespanPercent = (player.lifespan / player.maxLifespan) * 100
+  // 寿元进度条：从0开始，寿元耗尽时达到100%
+  const lifespanConsumedPercent = ((player.maxLifespan - player.lifespan) / player.maxLifespan) * 100
 
   return (
     <>
@@ -137,11 +158,11 @@ function FullStatusContent({ player }: { player: Player }) {
           />
           <StatBar
             label="寿元"
-            value={lifespanPercent}
+            value={lifespanConsumedPercent}
             max={100}
             display={`${Math.floor(player.lifespan)}/${player.maxLifespan}`}
-            colorClass={lifespanPercent < 20 ? 'bg-red-500' : 'bg-amber-500'}
-            warning={lifespanPercent < 20}
+            colorClass={lifespanConsumedPercent > 80 ? 'bg-red-500' : 'bg-amber-500'}
+            warning={lifespanConsumedPercent > 80}
           />
         </div>
       </div>
