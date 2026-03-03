@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { motion, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
 import type { GameLog } from '@/types/game'
 
@@ -10,31 +10,43 @@ interface StoryLogProps {
 export function StoryLog({ logs }: StoryLogProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // 自动滚动到底部
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
+    const el = scrollRef.current
+    if (!el) return
+    // 用 requestAnimationFrame 等待 DOM 更新后再滚动
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight
+    })
   }, [logs])
 
   return (
-    <div className="flex-1 bg-zinc-900/50 border border-zinc-800 rounded-lg overflow-hidden flex flex-col">
-      <div className="p-3 border-b border-zinc-800 bg-zinc-900/80">
-        <h3 className="text-sm font-medium text-zinc-300">修仙历程</h3>
+    <div className="flex-1 ink-card rounded-xl border border-[hsl(var(--ink-border))] overflow-hidden flex flex-col min-h-0">
+      {/* 标题栏 */}
+      <div className="px-4 py-2.5 border-b border-[hsl(var(--ink-border))] flex items-center gap-2 flex-shrink-0 bg-white/1">
+        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+        <h3 className="text-xs font-medium text-[hsl(var(--dim))] tracking-[0.2em] uppercase">修仙历程</h3>
       </div>
-      <ScrollArea className="flex-1 p-4" ref={scrollRef}>
-        <div className="space-y-4">
+
+      {/* 直接用原生 div 做滚动容器，ref 能直接控制 scrollTop */}
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto"
+      >
+        <div className="p-4 space-y-3">
           {logs.length === 0 ? (
-            <div className="text-center text-zinc-600 py-8">
-              暂无记录，开始你的修仙之旅吧...
+            <div className="text-center text-[hsl(var(--dim))] py-12 text-sm tracking-wider">
+              <div className="text-2xl mb-3 opacity-30">☁️</div>
+              暂无记录，开始你的修仙之旅吧…
             </div>
           ) : (
-            logs.map((log) => (
-              <LogMessage key={log.id} log={log} />
-            ))
+            <AnimatePresence initial={false}>
+              {logs.map((log) => (
+                <LogMessage key={log.id} log={log} />
+              ))}
+            </AnimatePresence>
           )}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   )
 }
@@ -44,81 +56,105 @@ function LogMessage({ log }: { log: GameLog }) {
   const isEvent = log.type === 'event'
   const isDialog = log.type === 'dialog'
 
-  // 玩家行动 - 右对齐，蓝色气泡
+  // 玩家行动 - 右对齐，靛蓝气泡
   if (isAction) {
     return (
-      <div className="flex justify-end">
-        <div className="max-w-[80%] bg-blue-600/20 border border-blue-600/30 rounded-2xl rounded-tr-sm px-4 py-2">
-          <div className="text-sm text-blue-200">
-            {log.content}
-          </div>
-          <div className="text-xs text-blue-400/60 mt-1 text-right">
+      <motion.div
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.3, ease: 'easeOut' }}
+        className="flex justify-end"
+      >
+        <div className="max-w-[80%] bg-blue-500/10 border border-blue-500/20 rounded-2xl rounded-tr-sm px-4 py-2.5">
+          <div className="text-sm text-blue-200/90 leading-relaxed">{log.content}</div>
+          <div className="text-xs text-blue-400/40 mt-1 text-right tabular-nums">
             {formatTime(log.timestamp)}
           </div>
         </div>
-      </div>
+      </motion.div>
     )
   }
 
-  // AI剧情/事件 - 左对齐，绿色气泡，支持Markdown
+  // AI剧情 - 左对齐，翡翠气泡 + Markdown
   if (isEvent) {
     return (
-      <div className="flex justify-start">
-        <div className="max-w-[90%] bg-emerald-900/20 border border-emerald-600/30 rounded-2xl rounded-tl-sm px-4 py-3">
+      <motion.div
+        initial={{ opacity: 0, x: -20 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.4, ease: 'easeOut' }}
+        className="flex justify-start"
+      >
+        <div className="max-w-[92%] bg-emerald-500/5 border border-emerald-500/15 rounded-2xl rounded-tl-sm px-4 py-3">
           <div className="prose prose-invert prose-sm max-w-none">
             <ReactMarkdown
               components={{
-                p: ({ children }) => <p className="text-zinc-200 mb-2 last:mb-0 leading-relaxed">{children}</p>,
-                strong: ({ children }) => <strong className="text-emerald-400 font-semibold">{children}</strong>,
-                em: ({ children }) => <em className="text-zinc-400 italic">{children}</em>,
+                p: ({ children }) => (
+                  <p className="text-foreground/85 mb-2 last:mb-0 leading-[1.8] text-sm">{children}</p>
+                ),
+                strong: ({ children }) => (
+                  <strong className="text-emerald-400 font-semibold">{children}</strong>
+                ),
+                em: ({ children }) => (
+                  <em className="text-foreground/60 italic">{children}</em>
+                ),
                 blockquote: ({ children }) => (
-                  <blockquote className="border-l-2 border-emerald-500/50 pl-3 my-2 text-zinc-400 italic">
+                  <blockquote className="border-l-2 border-emerald-500/40 pl-3 my-2 text-foreground/50 italic text-xs">
                     {children}
                   </blockquote>
+                ),
+                ul: ({ children }) => (
+                  <ul className="list-none space-y-1 text-sm">{children}</ul>
+                ),
+                li: ({ children }) => (
+                  <li className="text-foreground/70 flex gap-2 before:content-['·'] before:text-emerald-500/60">{children}</li>
                 ),
               }}
             >
               {log.content}
             </ReactMarkdown>
           </div>
-          <div className="text-xs text-emerald-400/60 mt-2">
+          <div className="text-xs text-emerald-500/30 mt-2 tabular-nums">
             {formatTime(log.timestamp)}
           </div>
         </div>
-      </div>
+      </motion.div>
     )
   }
 
-  // 对话 - 左对齐，黄色气泡
+  // 对话 - 左对齐，琥珀气泡
   if (isDialog) {
     return (
-      <div className="flex justify-start">
-        <div className="max-w-[80%] bg-yellow-600/10 border border-yellow-600/30 rounded-2xl rounded-tl-sm px-4 py-2">
-          <div className="text-sm text-yellow-200">
-            {log.content}
-          </div>
-          <div className="text-xs text-yellow-400/60 mt-1">
-            {formatTime(log.timestamp)}
-          </div>
+      <motion.div
+        initial={{ opacity: 0, x: -20 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.3 }}
+        className="flex justify-start"
+      >
+        <div className="max-w-[80%] bg-amber-500/8 border border-amber-500/20 rounded-2xl rounded-tl-sm px-4 py-2.5">
+          <div className="text-sm text-amber-200/80 leading-relaxed">{log.content}</div>
+          <div className="text-xs text-amber-400/40 mt-1 tabular-nums">{formatTime(log.timestamp)}</div>
         </div>
-      </div>
+      </motion.div>
     )
   }
 
-  // 系统消息 - 居中，灰色
+  // 系统消息 - 居中，细灰文字
   return (
-    <div className="flex justify-center">
-      <div className="text-xs text-zinc-500 italic px-4 py-1 bg-zinc-800/50 rounded-full">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="flex justify-center py-1"
+    >
+      <div className="text-xs text-[hsl(var(--dim))]/60 italic px-3 py-1 rounded-full tracking-wider">
         {log.content}
       </div>
-    </div>
+    </motion.div>
   )
 }
 
 function formatTime(timestamp: number): string {
-  const date = new Date(timestamp)
-  return date.toLocaleTimeString('zh-CN', { 
-    hour: '2-digit', 
-    minute: '2-digit' 
+  return new Date(timestamp).toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
   })
 }

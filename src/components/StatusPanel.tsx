@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Card } from '@/components/ui/card'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Sword, Shield, Zap, Heart, Sparkles, Users, BookOpen, Package } from 'lucide-react'
 import type { Player, Skill, Item, Relationship } from '@/types/game'
@@ -17,104 +17,108 @@ export function StatusPanel({ player }: StatusPanelProps) {
   const lifespanPercent = (player.lifespan / player.maxLifespan) * 100
 
   return (
-    <Card className="bg-zinc-900 border-zinc-800">
-      {/* 角色头部信息 */}
-      <div className="p-4 border-b border-zinc-800">
+    <div className="ink-card rounded-xl border border-[hsl(var(--ink-border))] h-full flex flex-col overflow-hidden">
+      {/* 角色头部 */}
+      <div className="p-4 border-b border-[hsl(var(--ink-border))] flex-shrink-0">
         <div className="flex items-center gap-3">
-          <div className="text-5xl">{player.avatar}</div>
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-bold text-zinc-100">{player.name}</span>
-              <span className="text-xs px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded">
-                {player.mbti}
-              </span>
-            </div>            
-            <div className="text-sm text-emerald-400 mt-0.5">
-              {player.realm}·{player.minorRealm}
+          <div className="relative">
+            <div className="w-14 h-14 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-3xl">
+              {player.avatar}
             </div>
-            <div className="text-xs text-zinc-500 mt-1">
-              {player.age}岁 · {player.background.slice(0, 20)}...
+            <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-background" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-foreground tracking-wide truncate">{player.name}</div>
+            <div className="text-sm text-emerald-400 mt-0.5 tracking-wider">
+              {player.realm} · {player.minorRealm}
+            </div>
+            <div className="text-xs text-[hsl(var(--dim))] mt-0.5 truncate">
+              {Math.floor(player.age)} 岁 · {player.background.slice(0, 14)}…
             </div>
           </div>
         </div>
 
         {/* 核心状态条 */}
         <div className="grid grid-cols-2 gap-3 mt-4">
-          <StatBar 
-            label="修为" 
-            value={cultivationPercent} 
+          <StatBar
+            label="修为"
+            value={cultivationPercent}
             max={100}
             display={`${cultivationPercent.toFixed(1)}%`}
-            color="bg-emerald-500"
+            colorClass="progress-jade"
           />
-          <StatBar 
-            label="寿元" 
-            value={lifespanPercent} 
+          <StatBar
+            label="寿元"
+            value={lifespanPercent}
             max={100}
             display={`${Math.floor(player.lifespan)}/${player.maxLifespan}`}
-            color={lifespanPercent < 20 ? 'bg-red-500' : 'bg-orange-500'}
+            colorClass={lifespanPercent < 20 ? 'bg-red-500' : 'bg-amber-500'}
             warning={lifespanPercent < 20}
           />
         </div>
       </div>
 
       {/* 四标签页 */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabType)} className="w-full">
-        <TabsList className="w-full grid grid-cols-4 bg-zinc-900 rounded-none border-b border-zinc-800">
-          <TabsTrigger value="stats" className="text-xs data-[state=active]:bg-zinc-800">
-            <Sword className="w-3 h-3 mr-1" />属性
-          </TabsTrigger>
-          <TabsTrigger value="inventory" className="text-xs data-[state=active]:bg-zinc-800">
-            <Package className="w-3 h-3 mr-1" />背包
-          </TabsTrigger>
-          <TabsTrigger value="skills" className="text-xs data-[state=active]:bg-zinc-800">
-            <BookOpen className="w-3 h-3 mr-1" />功法
-          </TabsTrigger>
-          <TabsTrigger value="relationships" className="text-xs data-[state=active]:bg-zinc-800">
-            <Users className="w-3 h-3 mr-1" />关系
-          </TabsTrigger>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabType)} className="flex-1 flex flex-col min-h-0">
+        <TabsList className="w-full grid grid-cols-4 bg-transparent rounded-none border-b border-[hsl(var(--ink-border))] h-10 flex-shrink-0 px-0">
+          {[
+            { value: 'stats', icon: Sword, label: '属性' },
+            { value: 'inventory', icon: Package, label: '背包' },
+            { value: 'skills', icon: BookOpen, label: '功法' },
+            { value: 'relationships', icon: Users, label: '关系' },
+          ].map(({ value, icon: Icon, label }) => (
+            <TabsTrigger
+              key={value}
+              value={value}
+              className="text-xs rounded-none data-[state=active]:bg-transparent data-[state=active]:text-emerald-400 data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-500 text-[hsl(var(--dim))] hover:text-foreground transition-colors h-full"
+            >
+              <Icon className="w-3 h-3 mr-1" />{label}
+            </TabsTrigger>
+          ))}
         </TabsList>
 
-        <TabsContent value="stats" className="m-0">
-          <StatsTab player={player} />
-        </TabsContent>
-
-        <TabsContent value="inventory" className="m-0">
-          <InventoryTab inventory={player.inventory || []} />
-        </TabsContent>
-
-        <TabsContent value="skills" className="m-0">
-          <SkillsTab skills={player.skills || []} />
-        </TabsContent>
-
-        <TabsContent value="relationships" className="m-0">
-          <RelationshipsTab relationships={player.relationships || {}} />
-        </TabsContent>
+        <div className="flex-1 overflow-y-auto">
+          <TabsContent value="stats" className="m-0 h-full">
+            <StatsTab player={player} />
+          </TabsContent>
+          <TabsContent value="inventory" className="m-0">
+            <InventoryTab inventory={player.inventory || []} />
+          </TabsContent>
+          <TabsContent value="skills" className="m-0">
+            <SkillsTab skills={player.skills || []} />
+          </TabsContent>
+          <TabsContent value="relationships" className="m-0">
+            <RelationshipsTab relationships={player.relationships || {}} />
+          </TabsContent>
+        </div>
       </Tabs>
-    </Card>
+    </div>
   )
 }
 
-function StatBar({ label, value, max, display, color, warning }: { 
+function StatBar({
+  label, value, max, display, colorClass, warning,
+}: {
   label: string
   value: number
   max: number
   display: string
-  color: string
+  colorClass: string
   warning?: boolean
 }) {
   const percentage = Math.min(100, Math.max(0, (value / max) * 100))
-  
   return (
-    <div className="space-y-1">
+    <div className="space-y-1.5">
       <div className="flex justify-between text-xs">
-        <span className="text-zinc-500">{label}</span>
-        <span className={warning ? 'text-red-400' : 'text-zinc-300'}>{display}</span>
+        <span className="text-[hsl(var(--dim))]">{label}</span>
+        <span className={warning ? 'text-red-400' : 'text-foreground/80'}>{display}</span>
       </div>
-      <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-        <div 
-          className={`h-full ${color} transition-all duration-300`}
-          style={{ width: `${percentage}%` }}
+      <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+        <motion.div
+          className={`h-full rounded-full ${colorClass}`}
+          initial={{ width: 0 }}
+          animate={{ width: `${percentage}%` }}
+          transition={{ duration: 0.8, ease: 'easeOut' }}
         />
       </div>
     </div>
@@ -124,48 +128,47 @@ function StatBar({ label, value, max, display, color, warning }: {
 function StatsTab({ player }: { player: Player }) {
   return (
     <div className="p-4 space-y-4">
-      {/* 战斗属性 */}
+      {/* 战斗状态 */}
       <div className="space-y-3">
-        <div className="flex items-center gap-2 text-xs text-zinc-500 mb-2">
-          <Heart className="w-3 h-3" />
-          <span>战斗状态</span>
-        </div>
-
-        <StatBar 
-          label="气血" 
-          value={player.health} 
+        <SectionTitle icon={Heart} label="战斗状态" />
+        <StatBar
+          label="气血"
+          value={player.health}
           max={player.maxHealth}
           display={`${player.health}/${player.maxHealth}`}
-          color="bg-red-500"
+          colorClass="bg-red-500"
         />
-        <StatBar 
-          label="真气" 
-          value={player.spiritualPower} 
+        <StatBar
+          label="真气"
+          value={player.spiritualPower}
           max={player.maxSpiritualPower}
           display={`${player.spiritualPower}/${player.maxSpiritualPower}`}
-          color="bg-blue-500"
+          colorClass="bg-blue-500"
         />
       </div>
 
       {/* 基础属性 */}
-      <div className="grid grid-cols-2 gap-3 pt-3 border-t border-zinc-800">
-        <Attribute label="攻击" value={player.attack} icon=<Sword className="w-3 h-3" /> />
-        <Attribute label="防御" value={player.defense} icon=<Shield className="w-3 h-3" /> />
-        <Attribute label="速度" value={player.speed} icon=<Zap className="w-3 h-3" /> />
-        <Attribute label="气运" value={player.luck} icon=<Sparkles className="w-3 h-3" /> />
-        <Attribute label="根骨" value={player.rootBone} icon=<Heart className="w-3 h-3" /> />
-        <Attribute label="悟性" value={player.comprehension} icon=<BookOpen className="w-3 h-3" /> />
+      <div className="pt-3 border-t border-[hsl(var(--ink-border))] space-y-2">
+        <SectionTitle icon={Sword} label="基础属性" />
+        <div className="grid grid-cols-2 gap-2">
+          <AttrRow label="攻击" value={player.attack} icon={<Sword className="w-3 h-3" />} />
+          <AttrRow label="防御" value={player.defense} icon={<Shield className="w-3 h-3" />} />
+          <AttrRow label="速度" value={player.speed} icon={<Zap className="w-3 h-3" />} />
+          <AttrRow label="气运" value={player.luck} icon={<Sparkles className="w-3 h-3" />} />
+          <AttrRow label="根骨" value={player.rootBone} icon={<Heart className="w-3 h-3" />} />
+          <AttrRow label="悟性" value={player.comprehension} icon={<BookOpen className="w-3 h-3" />} />
+        </div>
       </div>
 
       {/* 天赋 */}
       {player.talents.length > 0 && (
-        <div className="pt-3 border-t border-zinc-800">
-          <div className="text-xs text-zinc-500 mb-2">修仙天赋</div>
-          <div className="flex flex-wrap gap-1">
+        <div className="pt-3 border-t border-[hsl(var(--ink-border))]">
+          <SectionTitle icon={Sparkles} label="修仙天赋" />
+          <div className="flex flex-wrap gap-1.5 mt-2">
             {player.talents.map((talent, i) => (
-              <span 
-                key={i} 
-                className="text-xs px-2 py-0.5 bg-emerald-900/30 text-emerald-400 rounded border border-emerald-800/50"
+              <span
+                key={i}
+                className="text-xs px-2 py-0.5 bg-emerald-500/10 text-emerald-400 rounded border border-emerald-500/20 tracking-wide"
               >
                 {talent}
               </span>
@@ -175,131 +178,118 @@ function StatsTab({ player }: { player: Player }) {
       )}
 
       {/* 背景故事 */}
-      <div className="pt-3 border-t border-zinc-800">
-        <div className="text-xs text-zinc-500 mb-2">身世背景</div>
-        <p className="text-xs text-zinc-400 leading-relaxed">{player.background}</p>
+      <div className="pt-3 border-t border-[hsl(var(--ink-border))]">
+        <div className="text-xs text-[hsl(var(--dim))] mb-2 tracking-wider">身世背景</div>
+        <p className="text-xs text-foreground/60 leading-relaxed">{player.background}</p>
       </div>
     </div>
   )
 }
 
-function Attribute({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
+function SectionTitle({ icon: Icon, label }: { icon: React.ElementType; label: string }) {
   return (
-    <div className="flex items-center justify-between text-sm">
-      <div className="flex items-center gap-1.5 text-zinc-500">
+    <div className="flex items-center gap-1.5 text-xs text-[hsl(var(--dim))] tracking-wider">
+      <Icon className="w-3 h-3" />
+      {label}
+    </div>
+  )
+}
+
+function AttrRow({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between text-sm py-1">
+      <div className="flex items-center gap-1.5 text-[hsl(var(--dim))]">
         {icon}
-        <span>{label}</span>
+        <span className="text-xs">{label}</span>
       </div>
-      <span className="text-zinc-300 font-medium">{value}</span>
+      <span className="text-foreground/80 font-medium tabular-nums text-xs">{value}</span>
     </div>
   )
 }
 
 function InventoryTab({ inventory }: { inventory: Item[] }) {
   const itemEmojis: Record<string, string> = {
-    '武器': '⚔️',
-    '防具': '🛡️',
-    '丹药': '💊',
-    '符箓': '📜',
-    '功法': '📖',
-    '法宝': '🔮',
-    '材料': '🌿',
-    '杂物': '📦',
-    '灵石': '💎',
+    '武器': '⚔️', '防具': '🛡️', '丹药': '💊', '符箓': '📜',
+    '功法': '📖', '法宝': '🔮', '材料': '🌿', '杂物': '📦', '灵石': '💎',
   }
-
   const qualityColors: Record<string, string> = {
-    '凡品': 'text-zinc-400',
+    '凡品': 'text-[hsl(var(--dim))]',
     '灵品': 'text-blue-400',
     '仙品': 'text-purple-400',
-    '神品': 'text-yellow-400',
+    '神品': 'gold-text',
   }
 
   if (inventory.length === 0) {
-    return (
-      <div className="p-4 text-center text-zinc-600">
-        <div className="text-2xl mb-2">🎒</div>
-        <div className="text-xs">背包空空如也</div>
-      </div>
-    )
+    return <EmptyState emoji="🎒" text="背包空空如也" />
   }
 
   return (
-    <div className="p-2 space-y-1 max-h-[300px] overflow-y-auto">
-      {inventory.map((item) => (
-        <div 
-          key={item.id} 
-          className="flex items-start gap-2 p-2 bg-zinc-800/50 rounded hover:bg-zinc-800 transition-colors"
-        >
-          <span className="text-lg">{itemEmojis[item.type] || '📦'}</span>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1">
-              <span className={`text-sm font-medium ${qualityColors[item.quality] || 'text-zinc-300'}`}>
-                {item.name}
-              </span>
-              {item.quantity > 1 && (
-                <span className="text-xs text-zinc-500">x{item.quantity}</span>
-              )}
-            </div>            
-            <div className="text-xs text-zinc-500 truncate">{item.effect}</div>
-          </div>
-        </div>
-      ))}
+    <div className="p-2 space-y-1">
+      <AnimatePresence>
+        {inventory.map((item, i) => (
+          <motion.div
+            key={item.id}
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: i * 0.03 }}
+            className="flex items-start gap-2 p-2 rounded-lg hover:bg-white/3 transition-colors"
+          >
+            <span className="text-base flex-shrink-0">{itemEmojis[item.type] || '📦'}</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className={`text-xs font-medium ${qualityColors[item.quality] || 'text-foreground/80'}`}>
+                  {item.name}
+                </span>
+                {item.quantity > 1 && (
+                  <span className="text-xs text-[hsl(var(--dim))]">×{item.quantity}</span>
+                )}
+              </div>
+              <div className="text-xs text-[hsl(var(--dim))] truncate mt-0.5">{item.effect}</div>
+            </div>
+          </motion.div>
+        ))}
+      </AnimatePresence>
     </div>
   )
 }
 
 function SkillsTab({ skills }: { skills: Skill[] }) {
   const skillEmojis: Record<string, string> = {
-    '心法': '🧘',
-    '身法': '🏃',
-    '拳法': '👊',
-    '剑法': '⚔️',
-    '刀法': '🔪',
-    '枪法': '🔱',
-    '棍法': '🏒',
-    '阵法': '⭕',
-    '丹道': '⚗️',
-    '器道': '🔨',
+    '心法': '🧘', '身法': '🏃', '拳法': '👊', '剑法': '⚔️',
+    '刀法': '🔪', '枪法': '🔱', '棍法': '🏒', '阵法': '⭕', '丹道': '⚗️', '器道': '🔨',
   }
-
   const qualityColors: Record<string, string> = {
-    '凡阶': 'text-zinc-400',
+    '凡阶': 'text-[hsl(var(--dim))]',
     '灵阶': 'text-blue-400',
     '仙阶': 'text-purple-400',
-    '神阶': 'text-yellow-400',
+    '神阶': 'gold-text',
   }
 
   if (skills.length === 0) {
-    return (
-      <div className="p-4 text-center text-zinc-600">
-        <div className="text-2xl mb-2">📚</div>
-        <div className="text-xs">尚未习得任何功法</div>
-      </div>
-    )
+    return <EmptyState emoji="📚" text="尚未习得任何功法" />
   }
 
   return (
-    <div className="p-2 space-y-1 max-h-[300px] overflow-y-auto">
-      {skills.map((skill) => (
-        <div 
-          key={skill.id} 
-          className="flex items-start gap-2 p-2 bg-zinc-800/50 rounded hover:bg-zinc-800 transition-colors"
+    <div className="p-2 space-y-1">
+      {skills.map((skill, i) => (
+        <motion.div
+          key={skill.id}
+          initial={{ opacity: 0, x: -10 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: i * 0.03 }}
+          className="flex items-start gap-2 p-2 rounded-lg hover:bg-white/3 transition-colors"
         >
-          <span className="text-lg">{skillEmojis[skill.category] || '📖'}</span>
+          <span className="text-base flex-shrink-0">{skillEmojis[skill.category] || '📖'}</span>
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between">
-              <span className={`text-sm font-medium ${qualityColors[skill.quality] || 'text-zinc-300'}`}>
+              <span className={`text-xs font-medium ${qualityColors[skill.quality] || 'text-foreground/80'}`}>
                 {skill.name}
               </span>
-              <span className="text-xs text-emerald-400">Lv.{skill.level}</span>
-            </div>            
-            <div className="text-xs text-zinc-500">{skill.description}</div>
-            <div className="text-xs text-zinc-600 mt-0.5">
-              {skill.category} · {skill.type} · 需{skill.realmRequirement}
+              <span className="text-xs text-emerald-400 tabular-nums">Lv.{skill.level}</span>
             </div>
+            <div className="text-xs text-[hsl(var(--dim))] truncate mt-0.5">{skill.description}</div>
           </div>
-        </div>
+        </motion.div>
       ))}
     </div>
   )
@@ -307,58 +297,56 @@ function SkillsTab({ skills }: { skills: Skill[] }) {
 
 function RelationshipsTab({ relationships }: { relationships: Record<string, Relationship> }) {
   const relationshipList = Object.values(relationships)
-
   const levelColors: Record<string, string> = {
-    '敌对': 'text-red-400',
-    '冷淡': 'text-zinc-500',
-    '中立': 'text-zinc-400',
-    '友好': 'text-blue-400',
-    '亲密': 'text-emerald-400',
-    '挚爱': 'text-pink-400',
+    '敌对': 'text-red-400', '冷淡': 'text-[hsl(var(--dim))]',
+    '中立': 'text-foreground/60', '友好': 'text-blue-400',
+    '亲密': 'text-emerald-400', '挚爱': 'text-pink-400',
   }
 
   if (relationshipList.length === 0) {
-    return (
-      <div className="p-4 text-center text-zinc-600">
-        <div className="text-2xl mb-2">🤝</div>
-        <div className="text-xs">尚未结识任何道友</div>
-      </div>
-    )
+    return <EmptyState emoji="🤝" text="尚未结识任何道友" />
   }
 
   return (
-    <div className="p-2 space-y-1 max-h-[300px] overflow-y-auto">
-      {relationshipList.map((rel) => (
-        <div 
-          key={rel.npcId} 
-          className="flex items-start gap-2 p-2 bg-zinc-800/50 rounded hover:bg-zinc-800 transition-colors"
+    <div className="p-2 space-y-1">
+      {relationshipList.map((rel, i) => (
+        <motion.div
+          key={rel.npcId}
+          initial={{ opacity: 0, x: -10 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: i * 0.04 }}
+          className="flex items-start gap-2 p-2 rounded-lg hover:bg-white/3 transition-colors"
         >
-          <span className="text-lg">{rel.npcEmoji || '👤'}</span>
+          <span className="text-base flex-shrink-0">{rel.npcEmoji || '👤'}</span>
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-zinc-300">{rel.npcName}</span>
-              <span className={`text-xs ${levelColors[rel.level] || 'text-zinc-400'}`}>
-                {rel.level}
-              </span>
-            </div>            
-            <div className="text-xs text-zinc-500">{rel.npcIdentity}</div>
-            <div className="flex items-center gap-1 mt-1">
-              <div className="flex-1 h-1 bg-zinc-700 rounded-full overflow-hidden">
-                <div 
-                  className={`h-full ${rel.favorability >= 0 ? 'bg-emerald-500' : 'bg-red-500'}`}
-                  style={{ 
-                    width: `${Math.min(100, Math.abs(rel.favorability))}%`,
-                    opacity: rel.favorability === 0 ? 0 : 1
-                  }}
+              <span className="text-xs font-medium text-foreground/80">{rel.npcName}</span>
+              <span className={`text-xs ${levelColors[rel.level] || 'text-foreground/50'}`}>{rel.level}</span>
+            </div>
+            <div className="text-xs text-[hsl(var(--dim))] truncate mt-0.5">{rel.npcIdentity}</div>
+            <div className="flex items-center gap-1.5 mt-1.5">
+              <div className="flex-1 h-1 bg-white/5 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${rel.favorability >= 0 ? 'bg-emerald-500' : 'bg-red-500'}`}
+                  style={{ width: `${Math.min(100, Math.abs(rel.favorability))}%` }}
                 />
               </div>
-              <span className={`text-xs ${rel.favorability >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              <span className={`text-xs tabular-nums ${rel.favorability >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {rel.favorability > 0 ? '+' : ''}{rel.favorability}
               </span>
             </div>
           </div>
-        </div>
+        </motion.div>
       ))}
+    </div>
+  )
+}
+
+function EmptyState({ emoji, text }: { emoji: string; text: string }) {
+  return (
+    <div className="p-8 text-center text-[hsl(var(--dim))]">
+      <div className="text-3xl mb-2 opacity-50">{emoji}</div>
+      <div className="text-xs tracking-wider">{text}</div>
     </div>
   )
 }

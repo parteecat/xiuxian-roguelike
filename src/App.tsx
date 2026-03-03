@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { StartScreen } from './components/StartScreen'
 import { CharacterCreationScreen } from './components/CharacterCreationScreen'
 import { GameScreen } from './components/GameScreen'
@@ -16,8 +16,15 @@ function App() {
   // 游戏阶段：start(主页) -> character_creation(角色创建) -> game(游戏主界面)
   const [gamePhase, setGamePhase] = useState<'start' | 'character_creation' | 'game'>('start')
   const [isLoading, setIsLoading] = useState(false)
-  const [generatedCharacters, setGeneratedCharacters] = useState<Player[]>([])
   const [actionSuggestions, setActionSuggestions] = useState<string[]>([])
+
+  // 同步主题到 <html> class
+  const { theme } = useSettingsStore()
+  useEffect(() => {
+    const root = document.documentElement
+    root.classList.remove('light', 'dark')
+    root.classList.add(theme)
+  }, [theme])
 
   // Store
   const {
@@ -44,9 +51,12 @@ function App() {
     db.init().catch(console.error)
   }, [])
 
-  // 创建服务
-  const llmService = createLLMService(llmConfig)
-  const gameServiceWithMemory = createGameService(llmService)
+  // 创建服务（用 useMemo 保证 llmConfig 不变时不重新创建实例）
+  const gameServiceWithMemory = useMemo(
+    () => createGameService(createLLMService(llmConfig)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [llmConfig.baseURL, llmConfig.apiKey, llmConfig.model]
+  )
 
   // 自动存档功能
   const autoSave = useCallback(async () => {
@@ -99,7 +109,6 @@ function App() {
   // 从主页开始新游戏
   const handleStartFromHome = useCallback(() => {
     setGamePhase('character_creation')
-    setGeneratedCharacters([])
     setActionSuggestions([])
   }, [])
 
@@ -144,21 +153,6 @@ function App() {
       toast.info('已返回主页')
     })
   }, [autoSave])
-
-  // 生成角色
-  const handleGenerateCharacters = useCallback(async () => {
-    setIsLoading(true)
-    try {
-      const characters = await gameServiceWithMemory.generateCharacters()
-      setGeneratedCharacters(characters)
-      toast.success('角色生成成功！')
-    } catch (error) {
-      console.error('生成角色失败:', error)
-      toast.error('角色生成失败: ' + (error instanceof Error ? error.message : '未知错误'))
-    } finally {
-      setIsLoading(false)
-    }
-  }, [llmConfig, gameServiceWithMemory])
 
   // 选择角色开始游戏
   const handleSelectCharacter = useCallback(
@@ -256,6 +250,9 @@ function App() {
           if (result.statChanges.speed) updatedPlayer.speed += result.statChanges.speed
           if (result.statChanges.luck) updatedPlayer.luck += result.statChanges.luck
           if (result.statChanges.lifespan) updatedPlayer.lifespan += result.statChanges.lifespan
+          if (result.statChanges.rootBone) updatedPlayer.rootBone += result.statChanges.rootBone
+          if (result.statChanges.comprehension) updatedPlayer.comprehension += result.statChanges.comprehension
+          if (result.statChanges.karma) updatedPlayer.karma += result.statChanges.karma
         }
 
         // 更新时间
@@ -430,17 +427,15 @@ function App() {
   )
 
   return (
-    <div className="min-h-screen bg-zinc-950">
+    <div className="min-h-screen bg-background">
       {gamePhase === 'start' && (
         <StartScreen onStart={handleStartFromHome} onContinue={handleContinueGame} />
       )}
 
       {gamePhase === 'character_creation' && (
         <CharacterCreationScreen
-          characters={generatedCharacters}
-          isLoading={isLoading}
+          gameService={gameServiceWithMemory}
           onSelectCharacter={handleSelectCharacter}
-          onGenerateCharacters={handleGenerateCharacters}
           onReturnHome={handleReturnHome}
         />
       )}

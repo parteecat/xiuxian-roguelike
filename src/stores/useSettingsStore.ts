@@ -18,7 +18,7 @@ const defaultLlmConfig: LLMConfig = {
 const defaultSettings = {
   llmConfig: defaultLlmConfig,
   autoSave: true,
-  theme: 'dark' as const,
+  theme: 'light' as const,
 }
 
 export const useSettingsStore = create<SettingsStore>()(

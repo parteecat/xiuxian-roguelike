@@ -1,222 +1,412 @@
-
-import { useState } from 'react'
+import { useState, useCallback, type ReactNode } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Loader2, Sparkles, Settings, ArrowLeft, Heart, Zap, Sword, Shield, Wind } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { ArrowLeft, ArrowRight, Check, Loader2, RefreshCw, Heart, Zap, Sword, Shield, Wind, Sparkles } from 'lucide-react'
 import type { Player } from '@/types/game'
-import { SettingsPanel } from './SettingsPanel'
+import type { GameService } from '@/services/gameService'
+import { toast } from 'sonner'
+
+type StepId = 'name_stats' | 'personality' | 'talents'
+
+interface StatPanel {
+  label: string
+  health: number; maxHealth: number
+  spiritualPower: number; maxSpiritualPower: number
+  attack: number; defense: number; speed: number
+  luck: number; rootBone: number; comprehension: number
+}
+
+interface PersonalityOption { gender: string; avatar: string; desc: string }
+interface OriginOption { label: string; desc: string }
+interface BackgroundOption { label: string; background: string }
+interface TalentOption { name: string; desc: string; type: string }
 
 interface CharacterCreationScreenProps {
-  characters: Player[]
-  isLoading: boolean
+  gameService: GameService
   onSelectCharacter: (character: Player) => void
-  onGenerateCharacters: () => void
   onReturnHome?: () => void
 }
 
+const STEP_LABELS: Record<StepId, string> = {
+  name_stats: '命格初定',
+  personality: '性格出身',
+  talents: '初始天赋',
+}
+
+const steps: StepId[] = ['name_stats', 'personality', 'talents']
+
 export function CharacterCreationScreen({
-  characters,
-  isLoading,
+  gameService,
   onSelectCharacter,
-  onGenerateCharacters,
   onReturnHome,
 }: CharacterCreationScreenProps) {
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
-  const [showSettings, setShowSettings] = useState(false)
+  const [step, setStep] = useState<StepId>('name_stats')
+  const [isLoading, setIsLoading] = useState(false)
 
-  const handleConfirm = () => {
-    if (selectedIndex !== null) {
-      onSelectCharacter(characters[selectedIndex])
+  const [name, setName] = useState('')
+  const [statPanels, setStatPanels] = useState<StatPanel[]>(() => gameService.generateStatPanels())
+  const [selectedStatIdx, setSelectedStatIdx] = useState<number | null>(null)
+
+  const [personalities, setPersonalities] = useState<PersonalityOption[]>([])
+  const [origins, setOrigins] = useState<OriginOption[]>([])
+  const [backgrounds, setBackgrounds] = useState<BackgroundOption[]>([])
+  const [selectedPersonalityIdx, setSelectedPersonalityIdx] = useState<number | null>(null)
+  const [selectedOriginIdx, setSelectedOriginIdx] = useState<number | null>(null)
+  const [selectedBackgroundIdx, setSelectedBackgroundIdx] = useState<number | null>(null)
+
+  const [talentOptions, setTalentOptions] = useState<TalentOption[]>([])
+  const [selectedTalents, setSelectedTalents] = useState<Set<number>>(new Set())
+
+  const rerollStats = useCallback(() => {
+    setStatPanels(gameService.generateStatPanels())
+    setSelectedStatIdx(null)
+  }, [gameService])
+
+  const handleStep1Next = useCallback(async () => {
+    if (!name.trim()) { toast.error('请填写修士名号'); return }
+    if (selectedStatIdx === null) { toast.error('请选择一组基础属性'); return }
+    setIsLoading(true)
+    try {
+      const data = await gameService.generatePersonalityOptions(name.trim())
+      setPersonalities(data.personalities || [])
+      setOrigins(data.origins || [])
+      setBackgrounds(data.backgrounds || [])
+      setStep('personality')
+    } catch {
+      toast.error('天机推演受阻，请重试')
+    } finally {
+      setIsLoading(false)
     }
+  }, [name, selectedStatIdx, gameService])
+
+  const handleStep2Next = useCallback(async () => {
+    if (selectedPersonalityIdx === null) { toast.error('请选择性格'); return }
+    if (selectedOriginIdx === null) { toast.error('请选择出生'); return }
+    if (selectedBackgroundIdx === null) { toast.error('请选择背景'); return }
+    setIsLoading(true)
+    try {
+      const o = origins[selectedOriginIdx]
+      const b = backgrounds[selectedBackgroundIdx]
+      const data = await gameService.generateTalentOptions(name, o.label, b.background)
+      setTalentOptions(data.talents || [])
+      setStep('talents')
+    } catch {
+      toast.error('天机推演受阻，请重试')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [selectedPersonalityIdx, selectedOriginIdx, selectedBackgroundIdx, origins, backgrounds, name, gameService])
+
+  const toggleTalent = (idx: number) => {
+    setSelectedTalents(prev => {
+      const next = new Set(prev)
+      if (next.has(idx)) { next.delete(idx) }
+      else if (next.size < 2) { next.add(idx) }
+      else { toast.info('最多选择2个天赋') }
+      return next
+    })
   }
 
+  const handleFinish = () => {
+    if (selectedTalents.size < 1) { toast.error('请至少选择1个天赋'); return }
+    if (selectedStatIdx === null || selectedPersonalityIdx === null || selectedOriginIdx === null || selectedBackgroundIdx === null) return
+
+    const stats = statPanels[selectedStatIdx]
+    const p = personalities[selectedPersonalityIdx]
+    const bg = backgrounds[selectedBackgroundIdx]
+    const talents = Array.from(selectedTalents).map(i => talentOptions[i].name)
+
+    const character: Player = {
+      id: Math.random().toString(36).substring(2, 15),
+      name: name.trim(), gender: p.gender, avatar: p.avatar, background: bg.background,
+      realm: '炼气期', minorRealm: '初期', cultivationProgress: 0,
+      spiritualEnergy: 0, age: 18, lifespan: 120, maxLifespan: 120,
+      health: stats.health, maxHealth: stats.maxHealth,
+      spiritualPower: stats.spiritualPower, maxSpiritualPower: stats.maxSpiritualPower,
+      attack: stats.attack, defense: stats.defense, speed: stats.speed,
+      luck: stats.luck, rootBone: stats.rootBone, comprehension: stats.comprehension,
+      karma: 0, talents, inventory: [], skills: [], relationships: {}, growthHistory: [],
+    }
+    onSelectCharacter(character)
+  }
+
+  const stepIdx = steps.indexOf(step)
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-zinc-950 to-zinc-900 p-4 md:p-8">
-      <div className="max-w-6xl mx-auto">
-        {/* 标题和返回按钮 */}
-        <div className="text-center mb-8 relative">
+    <div className="min-h-screen xian-bg p-4 md:p-8">
+      <div className="max-w-3xl mx-auto">
+        {/* 顶部导航 */}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center mb-10 relative"
+        >
           {onReturnHome && (
             <Button
               variant="ghost"
               size="sm"
               onClick={onReturnHome}
-              className="absolute left-0 top-0 text-zinc-400 hover:text-zinc-200"
+              className="text-[hsl(var(--dim))] hover:text-foreground"
             >
-              <ArrowLeft className="w-4 h-4 mr-1" />
-              返回主页
+              <ArrowLeft className="w-4 h-4 mr-1" />返回
             </Button>
           )}
-          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent mb-4">
-            踏入仙途
-          </h1>
-          <p className="text-zinc-400 text-lg">
-            选择你的修仙之路，开启一段传奇 journey
-          </p>
-        </div>
-
-        {/* 生成按钮和模型设置 */}
-        {characters.length === 0 && (
-          <div className="text-center mb-8 space-y-4">
-            <Button
-              onClick={onGenerateCharacters}
-              disabled={isLoading}
-              size="lg"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-6 text-lg"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  正在生成角色...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-5 h-5 mr-2" />
-                  生成角色
-                </>
-              )}
-            </Button>
-
-            {/* 模型设置按钮 */}
-            <div>
-              <Dialog open={showSettings} onOpenChange={setShowSettings}>
-                <DialogTrigger asChild>
-                  <Button
-                    size="lg"
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-6 text-lg"
-                  >
-                    <Settings className="w-5 h-5 mr-2" />
-                    模型设置
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-[500px] bg-zinc-900 border-zinc-800 text-zinc-100">
-                  <DialogHeader>
-                    <DialogTitle className="text-zinc-100">模型设置</DialogTitle>
-                  </DialogHeader>
-                  <SettingsPanel />
-                </DialogContent>
-              </Dialog>
-            </div>
+          <div className="absolute left-1/2 -translate-x-1/2 text-center">
+            <h1 className="text-2xl font-bold jade-text tracking-[0.2em]">踏入仙途</h1>
           </div>
-        )}
+        </motion.div>
 
-        {/* 角色卡片网格 */}
-        {characters.length > 0 && (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              {characters.map((character, index) => (
-                <Card
-                  key={index}
-                  className={`cursor-pointer transition-all duration-200 ${
-                    selectedIndex === index
-                      ? 'ring-2 ring-emerald-500 bg-zinc-800'
-                      : 'hover:bg-zinc-800/50 bg-zinc-900'
-                  }`}
-                  onClick={() => setSelectedIndex(index)}
-                >
-                  <CardHeader className="text-center pb-2">
-                    <div className="text-6xl mb-2">{character.avatar}</div>
-                    <CardTitle className="text-zinc-100">{character.name}</CardTitle>
-                    <div className="flex justify-center gap-2 mt-1">
-                      <span className="text-xs px-2 py-0.5 bg-blue-900/30 text-blue-400 rounded">
-                        {character.mbti}
-                      </span>
-                      <span className="text-xs px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded">
-                        {character.gender}
-                      </span>
-                    </div>
-                    <CardDescription className="text-zinc-400 mt-2 line-clamp-2">
-                      {character.background}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {/* 境界 */}
-                    <div className="text-center">
-                      <span className="text-emerald-400 font-medium">
-                        {character.realm}·{character.minorRealm}
-                      </span>
-                    </div>
+        {/* 步骤指示器 */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.1 }}
+          className="flex items-center justify-center gap-2 mb-10"
+        >
+          {steps.map((s, i) => (
+            <div key={s} className="flex items-center gap-2">
+              <div className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs tracking-wider transition-all duration-300 ${
+                i < stepIdx
+                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                  : i === stepIdx
+                  ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
+                  : 'bg-white/3 text-[hsl(var(--dim))] border border-[hsl(var(--ink-border))]'
+              }`}>
+                {i < stepIdx ? <Check className="w-3 h-3" /> : <span>{i + 1}</span>}
+                <span>{STEP_LABELS[s]}</span>
+              </div>
+              {i < steps.length - 1 && (
+                <div className={`w-8 h-px transition-colors duration-300 ${i < stepIdx ? 'bg-emerald-500/50' : 'bg-[hsl(var(--ink-border))]'}`} />
+              )}
+            </div>
+          ))}
+        </motion.div>
 
-                    {/* 属性预览 */}
-                    <div className="space-y-2">
-                      {/* 基础属性 */}
-                      <div className="grid grid-cols-2 gap-2 text-sm">
-                        <div className="flex justify-between text-zinc-400">
-                          <span className="flex items-center gap-1"><Heart className="w-3 h-3" />气血</span>
-                          <span className="text-zinc-200">{character.maxHealth}</span>
-                        </div>
-                        <div className="flex justify-between text-zinc-400">
-                          <span className="flex items-center gap-1"><Zap className="w-3 h-3" />真气</span>
-                          <span className="text-zinc-200">{character.maxSpiritualPower}</span>
-                        </div>
-                        <div className="flex justify-between text-zinc-400">
-                          <span className="flex items-center gap-1"><Sword className="w-3 h-3" />攻击</span>
-                          <span className="text-zinc-200">{character.attack}</span>
-                        </div>
-                        <div className="flex justify-between text-zinc-400">
-                          <span className="flex items-center gap-1"><Shield className="w-3 h-3" />防御</span>
-                          <span className="text-zinc-200">{character.defense}</span>
-                        </div>
-                        <div className="flex justify-between text-zinc-400">
-                          <span className="flex items-center gap-1"><Wind className="w-3 h-3" />速度</span>
-                          <span className="text-zinc-200">{character.speed}</span>
-                        </div>
-                        <div className="flex justify-between text-zinc-400">
-                          <span>气运</span>
-                          <span className="text-zinc-200">{character.luck}</span>
-                        </div>
-                        <div className="flex justify-between text-zinc-400">
-                          <span>根骨</span>
-                          <span className="text-zinc-200">{character.rootBone}</span>
-                        </div>
-                        <div className="flex justify-between text-zinc-400">
-                          <span>悟性</span>
-                          <span className="text-zinc-200">{character.comprehension}</span>
-                        </div>
-                        <div className="flex justify-between text-zinc-400">
-                          <span>寿元</span>
-                          <span className="text-zinc-200">{character.maxLifespan}年</span>
-                        </div>
-                        <div className="flex justify-between text-zinc-400">
-                          <span>年龄</span>
-                          <span className="text-zinc-200">{character.age}岁</span>
-                        </div>
-                      </div>
-                    </div>
+        {/* 步骤内容 */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={step}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
+          >
+            {/* Step 1 */}
+            {step === 'name_stats' && (
+              <div className="space-y-7">
+                <div className="space-y-2">
+                  <Label className="text-foreground/70 text-xs tracking-widest">修士名号</Label>
+                  <Input
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    placeholder="请输入你的名字…"
+                    className="border-[hsl(var(--ink-border))] text-foreground text-lg py-6
+                      focus-visible:ring-emerald-500/30 focus-visible:border-emerald-500/30 tracking-wide"
+                    maxLength={16}
+                  />
+                </div>
 
-                    {/* 天赋 */}
-                    <div className="flex flex-wrap gap-1 pt-2 border-t border-zinc-800">
-                      {character.talents.slice(0, 3).map((talent, i) => (
-                        <span
-                          key={i}
-                          className="text-xs px-2 py-0.5 bg-emerald-900/30 text-emerald-400 rounded"
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-foreground/70 text-xs tracking-widest">选择基础属性面板</Label>
+                    <Button variant="ghost" size="sm" onClick={rerollStats}
+                      className="text-[hsl(var(--dim))] hover:text-foreground text-xs">
+                      <RefreshCw className="w-3 h-3 mr-1.5" />重新随机
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {statPanels.map((panel, idx) => (
+                      <motion.div
+                        key={idx}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => setSelectedStatIdx(idx)}
+                        className={`ink-card rounded-xl p-4 cursor-pointer transition-all duration-200 ${
+                          selectedStatIdx === idx
+                            ? 'card-selected'
+                            : 'border border-[hsl(var(--ink-border))] hover:border-emerald-500/20'
+                        }`}
+                      >
+                        <div className="text-center mb-3">
+                          <span className="text-sm font-medium text-emerald-400 tracking-wider">{panel.label}</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5 text-xs">
+                          <StatRow icon={<Heart className="w-3 h-3" />} label="气血" value={panel.maxHealth} />
+                          <StatRow icon={<Zap className="w-3 h-3" />} label="真气" value={panel.maxSpiritualPower} />
+                          <StatRow icon={<Sword className="w-3 h-3" />} label="攻击" value={panel.attack} />
+                          <StatRow icon={<Shield className="w-3 h-3" />} label="防御" value={panel.defense} />
+                          <StatRow icon={<Wind className="w-3 h-3" />} label="速度" value={panel.speed} />
+                          <StatRow label="气运" value={panel.luck} />
+                          <StatRow label="根骨" value={panel.rootBone} />
+                          <StatRow label="悟性" value={panel.comprehension} />
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <Button
+                    onClick={handleStep1Next}
+                    disabled={isLoading || !name.trim() || selectedStatIdx === null}
+                    className="btn-jade px-8 rounded-xl tracking-widest disabled:opacity-40"
+                  >
+                    {isLoading ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />天机推演中…</>
+                    ) : (
+                      <>下一步<ArrowRight className="w-4 h-4 ml-2" /></>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2 */}
+            {step === 'personality' && (
+              <div className="space-y-7">
+                <SelectGroup
+                  title="选择性格"
+                  items={personalities.map(p => ({ label: `${p.avatar} ${p.gender}`, desc: p.desc }))}
+                  selected={selectedPersonalityIdx}
+                  onSelect={setSelectedPersonalityIdx}
+                />
+                <SelectGroup
+                  title="选择出生"
+                  items={origins.map(o => ({ label: o.label, desc: o.desc }))}
+                  selected={selectedOriginIdx}
+                  onSelect={setSelectedOriginIdx}
+                />
+                <SelectGroup
+                  title="选择背景"
+                  items={backgrounds.map(b => ({ label: b.label, desc: b.background }))}
+                  selected={selectedBackgroundIdx}
+                  onSelect={setSelectedBackgroundIdx}
+                />
+                <div className="flex justify-between">
+                  <Button variant="ghost" onClick={() => setStep('name_stats')}
+                    className="text-[hsl(var(--dim))] hover:text-foreground tracking-wider">
+                    <ArrowLeft className="w-4 h-4 mr-1" />上一步
+                  </Button>
+                  <Button
+                    onClick={handleStep2Next}
+                    disabled={isLoading || selectedPersonalityIdx === null || selectedOriginIdx === null || selectedBackgroundIdx === null}
+                    className="btn-jade px-8 rounded-xl tracking-widest disabled:opacity-40"
+                  >
+                    {isLoading ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />天机推演中…</>
+                    ) : (
+                      <>下一步<ArrowRight className="w-4 h-4 ml-2" /></>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 3 */}
+            {step === 'talents' && (
+              <div className="space-y-7">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-foreground/70 text-xs tracking-widest">选择初始天赋（最多2个）</Label>
+                    <span className="text-xs text-[hsl(var(--dim))]">已选 {selectedTalents.size}/2</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {talentOptions.map((talent, idx) => {
+                      const chosen = selectedTalents.has(idx)
+                      return (
+                        <motion.div
+                          key={idx}
+                          whileHover={{ scale: 1.01 }}
+                          whileTap={{ scale: 0.99 }}
+                          onClick={() => toggleTalent(idx)}
+                          className={`ink-card rounded-xl p-4 cursor-pointer transition-all duration-200 ${
+                            chosen
+                              ? 'card-selected'
+                              : 'border border-[hsl(var(--ink-border))] hover:border-emerald-500/20'
+                          }`}
                         >
-                          {talent}
-                        </span>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                          <div className="flex items-start gap-3">
+                            <div className={`mt-0.5 w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all ${
+                              chosen ? 'bg-emerald-500 border-emerald-400' : 'border-[hsl(var(--ink-border))]'
+                            }`}>
+                              {chosen && <Check className="w-3 h-3 text-white" />}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-medium text-foreground/90 text-sm tracking-wide">{talent.name}</span>
+                                <span className="text-xs px-1.5 py-0.5 bg-white/5 text-[hsl(var(--dim))] rounded border border-[hsl(var(--ink-border))]">
+                                  {talent.type}
+                                </span>
+                              </div>
+                              <p className="text-xs text-[hsl(var(--dim))] leading-relaxed">{talent.desc}</p>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )
+                    })}
+                  </div>
+                </div>
+                <div className="flex justify-between">
+                  <Button variant="ghost" onClick={() => setStep('personality')}
+                    className="text-[hsl(var(--dim))] hover:text-foreground tracking-wider">
+                    <ArrowLeft className="w-4 h-4 mr-1" />上一步
+                  </Button>
+                  <Button
+                    onClick={handleFinish}
+                    disabled={selectedTalents.size < 1}
+                    className="btn-jade px-8 rounded-xl tracking-widest disabled:opacity-40"
+                  >
+                    <Sparkles className="w-4 h-4 mr-2" />踏入仙途
+                  </Button>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    </div>
+  )
+}
 
-            {/* 确认按钮 */}
-            <div className="text-center">
-              <Button
-                onClick={handleConfirm}
-                disabled={selectedIndex === null}
-                size="lg"
-                className="bg-emerald-600 hover:bg-emerald-700 text-white px-12 py-6 text-lg"
-              >
-                {selectedIndex !== null ? (
-                  <>选择 {characters[selectedIndex].name} 踏入仙途</>
-                ) : (
-                  '请先选择一个角色'
-                )}
-              </Button>
-            </div>
-          </>
-        )}
+function StatRow({ icon, label, value }: { icon?: ReactNode; label: string; value: number }) {
+  return (
+    <div className="flex justify-between text-[hsl(var(--dim))]">
+      <span className="flex items-center gap-1">{icon}{label}</span>
+      <span className="text-foreground/80 tabular-nums">{value}</span>
+    </div>
+  )
+}
+
+function SelectGroup({
+  title, items, selected, onSelect,
+}: {
+  title: string
+  items: Array<{ label: string; desc: string }>
+  selected: number | null
+  onSelect: (i: number) => void
+}) {
+  return (
+    <div className="space-y-2">
+      <Label className="text-foreground/70 text-xs tracking-widest">{title}</Label>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {items.map((item, idx) => (
+          <motion.div
+            key={idx}
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.99 }}
+            onClick={() => onSelect(idx)}
+            className={`ink-card rounded-xl p-3 cursor-pointer transition-all duration-200 ${
+              selected === idx
+                ? 'card-selected'
+                : 'border border-[hsl(var(--ink-border))] hover:border-emerald-500/20'
+            }`}
+          >
+            <div className="font-medium text-foreground/90 text-sm mb-1 tracking-wide">{item.label}</div>
+            <p className="text-xs text-[hsl(var(--dim))] leading-relaxed">{item.desc}</p>
+          </motion.div>
+        ))}
       </div>
     </div>
   )

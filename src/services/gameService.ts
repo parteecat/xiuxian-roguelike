@@ -31,6 +31,9 @@ export interface StoryResult {
     speed?: number
     luck?: number
     lifespan?: number
+    rootBone?: number
+    comprehension?: number
+    karma?: number
   }
   itemsGained: Item[]
   itemsLost: string[]
@@ -100,6 +103,95 @@ export class GameService {
     }))
   }
 
+  // 随机生成3组基础属性面板
+  generateStatPanels(): Array<{
+    health: number; maxHealth: number
+    spiritualPower: number; maxSpiritualPower: number
+    attack: number; defense: number; speed: number
+    luck: number; rootBone: number; comprehension: number
+    label: string
+  }> {
+    const rand = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min
+    const templates = [
+      { label: '体修·刚猛', healthBonus: 30, atkBonus: 10, defBonus: 5, spdBonus: 0 },
+      { label: '剑修·均衡', healthBonus: 10, atkBonus: 5, defBonus: 5, spdBonus: 5 },
+      { label: '道修·灵动', healthBonus: 0, atkBonus: 0, defBonus: 5, spdBonus: 10 },
+    ]
+    return templates.map(t => ({
+      label: t.label,
+      health: 100 + t.healthBonus,
+      maxHealth: 100 + t.healthBonus,
+      spiritualPower: 100,
+      maxSpiritualPower: 100,
+      attack: 20 + t.atkBonus + rand(-3, 3),
+      defense: 20 + t.defBonus + rand(-3, 3),
+      speed: 20 + t.spdBonus + rand(-3, 3),
+      luck: rand(40, 70),
+      rootBone: rand(40, 70),
+      comprehension: rand(40, 70),
+    }))
+  }
+
+  // 生成性格/出生/背景选项（根据用户填写的名称）
+  async generatePersonalityOptions(name: string): Promise<{
+    personalities: Array<{ gender: string; avatar: string; desc: string }>
+    origins: Array<{ label: string; desc: string }>
+    backgrounds: Array<{ label: string; background: string }>
+  }> {
+    const prompt = `你是修仙世界的天道，请为名为"${name}"的修士生成角色选项，返回JSON：
+{
+  "personalities": [
+    { "gender": "男", "avatar": "🧙‍♂️", "desc": "冷静多谋，不苟言笑" },
+    { "gender": "女", "avatar": "🌸", "desc": "活泼开朗，热情似火" },
+    { "gender": "男", "avatar": "⚔️", "desc": "沉稳守规，意志如铁" }
+  ],
+  "origins": [
+    { "label": "世家弃子", "desc": "曾是名门望族，却因故被逐出家门" },
+    { "label": "山野孤儿", "desc": "自幼父母双亡，靠自身摸爬滚打成长" },
+    { "label": "凡人天才", "desc": "生于普通农家，却拥有常人难及的天资" }
+  ],
+  "backgrounds": [
+    { "label": "机缘巧合", "background": "偶然间得到一本残缺古籍，从此踏上修仙路" },
+    { "label": "家仇国恨", "background": "家人惨遭杀害，为报仇雪恨而踏入仙途" },
+    { "label": "追逐长生", "background": "目睹至亲病逝，立志追求长生之道" }
+  ]
+}`
+    const messages = [
+      { role: 'system' as const, content: '你是修仙世界的天道意志，请生成多样化的角色选项，必须返回有效JSON。' },
+      { role: 'user' as const, content: prompt },
+    ]
+    const response = await this.llmService.generate(messages, {
+      temperature: 0.9,
+      response_format: { type: 'json_object' },
+    })
+    return JSON.parse(response.content)
+  }
+
+  // 生成初始天赋选项
+  async generateTalentOptions(name: string, origin: string, background: string): Promise<{
+    talents: Array<{ name: string; desc: string; type: string }>
+  }> {
+    const prompt = `修士"${name}"，出身${origin}，背景：${background}。
+请为其生成6个初始天赋选项（玩家从中选2个），返回JSON：
+{
+  "talents": [
+    { "name": "天生剑骨", "desc": "与生俱来的剑道亲和力，领悟剑法事半功倍", "type": "战斗" },
+    { "name": "五灵根", "desc": "修炼速度极快，但突破时风险更高", "type": "修炼" },
+    { "name": "过目不忘", "desc": "见过的功法秘籍皆能记住并融会贯通", "type": "辅助" }
+  ]
+}
+生成6个风格迥异的天赋，涵盖战斗/修炼/炼器/丹道/阵法/特殊等类型。`
+    const messages = [
+      { role: 'system' as const, content: '你是修仙世界的天道意志，请生成独特的天赋选项，必须返回有效JSON。' },
+      { role: 'user' as const, content: prompt },
+    ]
+    const response = await this.llmService.generate(messages, {
+      temperature: 0.9,
+      response_format: { type: 'json_object' },
+    })
+    return JSON.parse(response.content)
+  }
+
   // 生成剧情
   async generateStory(
     player: Player,
@@ -124,7 +216,6 @@ export class GameService {
 真气: ${player.spiritualPower}/${player.maxSpiritualPower}
 属性: 攻击${player.attack} 防御${player.defense} 速度${player.speed} 气运${player.luck} 根骨${player.rootBone} 悟性${player.comprehension}
 天赋: ${player.talents.join(', ')}
-性格: ${player.mbti}
 背景: ${player.background}
     `.trim()
 
