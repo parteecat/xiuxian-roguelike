@@ -53,6 +53,8 @@ npm run test:coverage          # 生成覆盖率报告
 
 ## 2. 游戏核心系统规范
 
+完整的优秀需求和设计参考 docs/game-design.md
+
 ### 2.1 境界系统
 
 **境界等级（CultivationRealm）：**

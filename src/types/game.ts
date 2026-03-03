@@ -109,7 +109,6 @@ export interface Player {
   name: string
   gender: string
   background: string
-  mbti: string
   realm: CultivationRealm
   minorRealm: MinorRealm
   cultivationProgress: number
