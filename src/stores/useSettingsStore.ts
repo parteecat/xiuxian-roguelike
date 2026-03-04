@@ -10,9 +10,9 @@ interface SettingsStore extends GameSettings {
 }
 
 const defaultLlmConfig: LLMConfig = {
-  baseURL: 'https://api.openai.com/v1',
-  apiKey: '',
-  model: 'gpt-4',
+  baseURL: import.meta.env.VITE_LLM_BASE_URL || 'https://api.openai.com/v1',
+  apiKey: import.meta.env.VITE_LLM_API_KEY || '',
+  model: import.meta.env.VITE_LLM_MODEL || 'gpt-4',
 }
 
 const defaultSettings = {

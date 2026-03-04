@@ -255,28 +255,34 @@ function App() {
           if (result.statChanges.karma) updatedPlayer.karma += result.statChanges.karma
         }
 
-        // 更新时间
-        updatedPlayer.age +=
-          result.timePassed.year + result.timePassed.month / 12 + result.timePassed.day / 365
+        // 更新时间（带安全默认值，防止NaN）
+        const timePassed = result.timePassed || { year: 0, month: 0, day: 0 }
+        const yearsPassed = Number(timePassed.year) || 0
+        const monthsPassed = Number(timePassed.month) || 0
+        const daysPassed = Number(timePassed.day) || 0
+
+        updatedPlayer.age += yearsPassed + monthsPassed / 12 + daysPassed / 365
 
         // 消耗寿元
-        const lifespanCost =
-          result.timePassed.year * 1 + result.timePassed.month * 0.1 + result.timePassed.day * 0.01
+        const lifespanCost = yearsPassed * 1 + monthsPassed * 0.1 + daysPassed * 0.01
         updatedPlayer.lifespan -= lifespanCost
 
-        // 增加修为
-        updatedPlayer.cultivationProgress += result.cultivationGained
+        // 增加修为（带安全检查）
+        const cultivationGained = Number(result.cultivationGained) || 0
+        updatedPlayer.cultivationProgress += cultivationGained
         if (updatedPlayer.cultivationProgress >= 100) {
           updatedPlayer.cultivationProgress = 100
         }
 
-        // 增加灵气
-        updatedPlayer.spiritualEnergy += result.spiritualEnergyGained
+        // 增加灵气（带安全检查）
+        const spiritualEnergyGained = Number(result.spiritualEnergyGained) || 0
+        updatedPlayer.spiritualEnergy += spiritualEnergyGained
 
-        // 处理突破
-        if (result.breakthrough.occurred && result.breakthrough.success) {
-          updatedPlayer.realm = result.breakthrough.newRealm as Player['realm']
-          updatedPlayer.minorRealm = result.breakthrough.newMinorRealm as Player['minorRealm']
+        // 处理突破（带安全检查）
+        const breakthrough = result.breakthrough || { occurred: false, success: false }
+        if (breakthrough.occurred && breakthrough.success) {
+          updatedPlayer.realm = (breakthrough.newRealm as Player['realm']) || updatedPlayer.realm
+          updatedPlayer.minorRealm = (breakthrough.newMinorRealm as Player['minorRealm']) || updatedPlayer.minorRealm
           updatedPlayer.cultivationProgress = 0
 
           // 增加寿元上限
@@ -291,8 +297,11 @@ function App() {
             大乘期: 50000,
             渡劫期: 99999,
           }
-          updatedPlayer.maxLifespan = realmLifespanBonus[updatedPlayer.realm] || 100
-          updatedPlayer.lifespan = updatedPlayer.maxLifespan * 0.5
+          const newMaxLifespan = realmLifespanBonus[updatedPlayer.realm] || 100
+          // 寿元增加新上限与原上限的差值的一半（突破延寿）
+          const lifespanIncrease = (newMaxLifespan - updatedPlayer.maxLifespan) * 0.5
+          updatedPlayer.maxLifespan = newMaxLifespan
+          updatedPlayer.lifespan = Math.min(updatedPlayer.maxLifespan, updatedPlayer.lifespan + lifespanIncrease)
         }
 
         // 添加获得的物品

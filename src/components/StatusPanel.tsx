@@ -34,8 +34,8 @@ export function StatusPanel({ player }: StatusPanelProps) {
   }
 
   const cultivationPercent = safePlayer.cultivationProgress
-  // 寿元进度条：从0开始，寿元耗尽时达到100%
-  const lifespanConsumedPercent = ((safePlayer.maxLifespan - safePlayer.lifespan) / safePlayer.maxLifespan) * 100
+  // 寿元进度条：剩余寿元百分比，满寿元时是100%，耗尽时是0%
+  const lifespanRemainingPercent = (safePlayer.lifespan / safePlayer.maxLifespan) * 100
 
   // 移动端简化版内容
   const MobileCompactView = () => (
@@ -85,10 +85,10 @@ export function StatusPanel({ player }: StatusPanelProps) {
         />
         <CompactStatBar
           label="寿元"
-          value={lifespanConsumedPercent}
+          value={lifespanRemainingPercent}
           display={`${Math.floor(safePlayer.lifespan)}/${safePlayer.maxLifespan}`}
-          colorClass={lifespanConsumedPercent > 80 ? 'bg-red-500' : 'bg-amber-500'}
-          warning={lifespanConsumedPercent > 80}
+          colorClass={lifespanRemainingPercent < 20 ? 'bg-red-500' : 'bg-amber-500'}
+          warning={lifespanRemainingPercent < 20}
         />
       </div>
 
@@ -122,8 +122,8 @@ export function StatusPanel({ player }: StatusPanelProps) {
 function FullStatusContent({ player }: { player: Player }) {
   const [activeTab, setActiveTab] = useState<TabType>('stats')
   const cultivationPercent = player.cultivationProgress
-  // 寿元进度条：从0开始，寿元耗尽时达到100%
-  const lifespanConsumedPercent = ((player.maxLifespan - player.lifespan) / player.maxLifespan) * 100
+  // 寿元进度条：剩余寿元百分比，满寿元时是100%，耗尽时是0%
+  const lifespanRemainingPercent = (player.lifespan / player.maxLifespan) * 100
 
   return (
     <>
@@ -158,11 +158,11 @@ function FullStatusContent({ player }: { player: Player }) {
           />
           <StatBar
             label="寿元"
-            value={lifespanConsumedPercent}
+            value={lifespanRemainingPercent}
             max={100}
             display={`${Math.floor(player.lifespan)}/${player.maxLifespan}`}
-            colorClass={lifespanConsumedPercent > 80 ? 'bg-red-500' : 'bg-amber-500'}
-            warning={lifespanConsumedPercent > 80}
+            colorClass={lifespanRemainingPercent < 20 ? 'bg-red-500' : 'bg-amber-500'}
+            warning={lifespanRemainingPercent < 20}
           />
         </div>
       </div>

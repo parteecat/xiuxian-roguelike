@@ -14,6 +14,7 @@ type StepId = 'name_stats' | 'personality' | 'talents'
 
 interface StatPanel {
   label: string
+  desc: string
   health: number; maxHealth: number
   spiritualPower: number; maxSpiritualPower: number
   attack: number; defense: number; speed: number
@@ -47,7 +48,7 @@ export function CharacterCreationScreen({
   const [step, setStep] = useState<StepId>('name_stats')
   const [isLoading, setIsLoading] = useState(false)
 
-  const [name, setName] = useState('')
+  const [name, setName] = useState(() => gameService.generateRandomName())
   const [statPanels, setStatPanels] = useState<StatPanel[]>(() => gameService.generateStatPanels())
   const [selectedStatIdx, setSelectedStatIdx] = useState<number | null>(null)
 
@@ -66,6 +67,10 @@ export function CharacterCreationScreen({
     setSelectedStatIdx(null)
   }, [gameService])
 
+  const rerollName = useCallback(() => {
+    setName(gameService.generateRandomName())
+  }, [gameService])
+
   const handleStep1Next = useCallback(async () => {
     if (!name.trim()) { toast.error('请填写修士名号'); return }
     if (selectedStatIdx === null) { toast.error('请选择一组基础属性'); return }
@@ -75,6 +80,10 @@ export function CharacterCreationScreen({
       setPersonalities(data.personalities || [])
       setOrigins(data.origins || [])
       setBackgrounds(data.backgrounds || [])
+      // 重置选择
+      setSelectedPersonalityIdx(null)
+      setSelectedOriginIdx(null)
+      setSelectedBackgroundIdx(null)
       setStep('personality')
     } catch {
       toast.error('天机推演受阻，请重试')
@@ -93,6 +102,7 @@ export function CharacterCreationScreen({
       const b = backgrounds[selectedBackgroundIdx]
       const data = await gameService.generateTalentOptions(name, o.label, b.background)
       setTalentOptions(data.talents || [])
+      setSelectedTalents(new Set())
       setStep('talents')
     } catch {
       toast.error('天机推演受阻，请重试')
@@ -100,6 +110,22 @@ export function CharacterCreationScreen({
       setIsLoading(false)
     }
   }, [selectedPersonalityIdx, selectedOriginIdx, selectedBackgroundIdx, origins, backgrounds, name, gameService])
+
+  const rerollTalents = useCallback(async () => {
+    if (selectedOriginIdx === null || selectedBackgroundIdx === null) return
+    setIsLoading(true)
+    try {
+      const o = origins[selectedOriginIdx]
+      const b = backgrounds[selectedBackgroundIdx]
+      const data = await gameService.generateTalentOptions(name, o.label, b.background)
+      setTalentOptions(data.talents || [])
+      setSelectedTalents(new Set())
+    } catch {
+      toast.error('天机推演受阻，请重试')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [selectedOriginIdx, selectedBackgroundIdx, origins, backgrounds, name, gameService])
 
   const toggleTalent = (idx: number) => {
     setSelectedTalents(prev => {
@@ -200,14 +226,25 @@ export function CharacterCreationScreen({
               <div className="space-y-7">
                 <div className="space-y-2">
                   <Label className="text-foreground/70 text-xs tracking-widest">修士名号</Label>
-                  <Input
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    placeholder="请输入你的名字…"
-                    className="border-[hsl(var(--ink-border))] text-foreground text-lg py-6
-                      focus-visible:ring-emerald-500/30 focus-visible:border-emerald-500/30 tracking-wide"
-                    maxLength={16}
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      value={name}
+                      onChange={e => setName(e.target.value)}
+                      placeholder="请输入你的名字…"
+                      className="flex-1 border-[hsl(var(--ink-border))] text-foreground text-lg py-6
+                        focus-visible:ring-emerald-500/30 focus-visible:border-emerald-500/30 tracking-wide"
+                      maxLength={16}
+                    />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={rerollName}
+                      className="shrink-0 h-auto aspect-square border-[hsl(var(--ink-border))] hover:border-emerald-500/30 hover:bg-emerald-500/10"
+                      title="随机名字"
+                    >
+                      <RefreshCw className="w-4 h-4 text-emerald-400" />
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="space-y-3">
@@ -231,8 +268,9 @@ export function CharacterCreationScreen({
                             : 'border border-[hsl(var(--ink-border))] hover:border-emerald-500/20'
                         }`}
                       >
-                        <div className="text-center mb-3">
+                        <div className="text-center mb-2">
                           <span className="text-sm font-medium text-emerald-400 tracking-wider">{panel.label}</span>
+                          <p className="text-xs text-amber-500/80 mt-1 leading-relaxed italic">{panel.desc}</p>
                         </div>
                         <div className="grid grid-cols-2 gap-1.5 text-xs">
                           <StatRow icon={<Heart className="w-3 h-3" />} label="气血" value={panel.maxHealth} />
@@ -268,6 +306,17 @@ export function CharacterCreationScreen({
             {/* Step 2 */}
             {step === 'personality' && (
               <div className="space-y-7">
+                <div className="flex justify-end">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleStep1Next}
+                    disabled={isLoading}
+                    className="text-[hsl(var(--dim))] hover:text-foreground text-xs"
+                  >
+                    <RefreshCw className="w-3 h-3 mr-1.5" />重新推演
+                  </Button>
+                </div>
                 <SelectGroup
                   title="选择性格"
                   items={personalities.map(p => ({ label: `${p.avatar} ${p.gender}`, desc: p.desc }))}
@@ -309,6 +358,17 @@ export function CharacterCreationScreen({
             {/* Step 3 */}
             {step === 'talents' && (
               <div className="space-y-7">
+                <div className="flex justify-end">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={rerollTalents}
+                    disabled={isLoading}
+                    className="text-[hsl(var(--dim))] hover:text-foreground text-xs"
+                  >
+                    <RefreshCw className="w-3 h-3 mr-1.5" />重新推演
+                  </Button>
+                </div>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <Label className="text-foreground/70 text-xs tracking-widest">选择初始天赋（最多2个）</Label>
@@ -398,7 +458,7 @@ function SelectGroup({
   return (
     <div className="space-y-2">
       <Label className="text-foreground/70 text-xs tracking-widest">{title}</Label>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         {items.map((item, idx) => (
           <motion.div
             key={idx}

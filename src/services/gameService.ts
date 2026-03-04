@@ -123,16 +123,28 @@ export class GameService {
     spiritualPower: number; maxSpiritualPower: number
     attack: number; defense: number; speed: number
     luck: number; rootBone: number; comprehension: number
-    label: string
+    label: string; desc: string
   }> {
     const rand = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min
     const templates = [
-      { label: '体修·刚猛', healthBonus: 30, atkBonus: 10, defBonus: 5, spdBonus: 0 },
-      { label: '剑修·均衡', healthBonus: 10, atkBonus: 5, defBonus: 5, spdBonus: 5 },
-      { label: '道修·灵动', healthBonus: 0, atkBonus: 0, defBonus: 5, spdBonus: 10 },
+      { label: '体修·金刚', desc: '钢筋铁骨，气血充沛，防御惊人', healthBonus: 35, atkBonus: 8, defBonus: 8, spdBonus: -5, luck: 50, rootBone: 65, comprehension: 45 },
+      { label: '剑修·凌厉', desc: '剑气纵横，攻伐无双，身法迅捷', healthBonus: 10, atkBonus: 15, defBonus: 0, spdBonus: 10, luck: 55, rootBone: 55, comprehension: 60 },
+      { label: '道修·玄妙', desc: '道法自然，悟性超群，均衡发展', healthBonus: 5, atkBonus: 5, defBonus: 5, spdBonus: 5, luck: 60, rootBone: 50, comprehension: 70 },
+      { label: '法修·焚天', desc: '术法通神，破坏极强，身躯孱弱', healthBonus: 0, atkBonus: 20, defBonus: -5, spdBonus: 0, luck: 45, rootBone: 60, comprehension: 65 },
+      { label: '医修·回春', desc: '妙手仁心，生生不息，不善攻伐', healthBonus: 25, atkBonus: 0, defBonus: 10, spdBonus: -5, luck: 65, rootBone: 55, comprehension: 55 },
+      { label: '符修·诡道', desc: '符箓万千，神出鬼没，气运加身', healthBonus: 5, atkBonus: 10, defBonus: 0, spdBonus: 15, luck: 70, rootBone: 50, comprehension: 60 },
+      { label: '阵修·不动', desc: '阵法宗师，固若金汤，行动迟缓', healthBonus: 15, atkBonus: 0, defBonus: 20, spdBonus: -10, luck: 50, rootBone: 60, comprehension: 55 },
+      { label: '灵修·福缘', desc: '天道眷顾，气运逆天，福泽深厚', healthBonus: 10, atkBonus: 0, defBonus: 0, spdBonus: 5, luck: 85, rootBone: 50, comprehension: 60 },
+      { label: '魔修·嗜血', desc: '以血为引，疯狂嗜杀，业力缠身', healthBonus: 20, atkBonus: 18, defBonus: 0, spdBonus: 5, luck: 35, rootBone: 70, comprehension: 50 },
+      { label: '妖修·野性', desc: '妖血沸腾，肉身强横，灵智稍逊', healthBonus: 25, atkBonus: 12, defBonus: 5, spdBonus: 8, luck: 50, rootBone: 75, comprehension: 40 },
+      { label: '佛修·禅心', desc: '禅意通明，金刚不坏，悟性高深', healthBonus: 30, atkBonus: 5, defBonus: 15, spdBonus: -5, luck: 60, rootBone: 55, comprehension: 65 },
+      { label: '儒修·浩然', desc: '正气凛然，博览群书，智慧超群', healthBonus: 15, atkBonus: 8, defBonus: 8, spdBonus: 0, luck: 55, rootBone: 50, comprehension: 75 },
     ]
-    return templates.map(t => ({
+    // 随机打乱模板，取前3个
+    const shuffled = templates.sort(() => Math.random() - 0.5).slice(0, 3)
+    return shuffled.map(t => ({
       label: t.label,
+      desc: t.desc,
       health: 100 + t.healthBonus,
       maxHealth: 100 + t.healthBonus,
       spiritualPower: 100,
@@ -140,10 +152,52 @@ export class GameService {
       attack: 20 + t.atkBonus + rand(-3, 3),
       defense: 20 + t.defBonus + rand(-3, 3),
       speed: 20 + t.spdBonus + rand(-3, 3),
-      luck: rand(40, 70),
-      rootBone: rand(40, 70),
-      comprehension: rand(40, 70),
+      luck: t.luck + rand(-5, 5),
+      rootBone: t.rootBone + rand(-5, 5),
+      comprehension: t.comprehension + rand(-5, 5),
     }))
+  }
+
+  // 生成随机修士名字
+  generateRandomName(): string {
+    const surnames = [
+      '李', '王', '张', '刘', '陈', '杨', '赵', '黄', '周', '吴',
+      '徐', '孙', '胡', '朱', '高', '林', '何', '郭', '马', '罗',
+      '梁', '宋', '郑', '谢', '韩', '唐', '冯', '于', '董', '萧',
+      '程', '曹', '袁', '邓', '许', '傅', '沈', '曾', '彭', '吕',
+      '苏', '卢', '蒋', '蔡', '贾', '丁', '魏', '薛', '叶', '阎',
+      '段', '雷', '侯', '龙', '史', '陶', '黎', '贺', '顾', '毛',
+      '郝', '龚', '邵', '万', '钱', '严', '覃', '武', '戴', '莫',
+      '孔', '白', '盛', '林', '刁', '钟', '徐', '邱', '骆', '高',
+      '夏', '蔡', '田', '樊', '胡', '凌', '霍', '虞', '支', '柯',
+      '昝', '管', '卢', '莫', '经', '房', '裘', '缪', '干', '解',
+      '慕容', '欧阳', '上官', '诸葛', '东方', '司徒', '令狐', '轩辕', '独孤'
+    ]
+    const names = [
+      '逍遥', '无忌', '长卿', '子轩', '天宇', '浩然', '文轩', '子墨', '思远', '俊杰',
+      '嘉懿', '煜城', '懿轩', '烨伟', '苑博', '伟泽', '熠彤', '鸿煊', '博涛', '烨霖',
+      '依晨', '可馨', '雨嘉', '雅琳', '诗涵', '瑾萱', '梦洁', '凌薇', '美琳', '欢馨',
+      '婉婷', '钰彤', '璟雯', '婧琪', '玥婷', '梦瑶', '静宸', '诗琪', '羽馨', '歆瑶',
+      '云', '风', '雨', '雷', '电', '霜', '雪', '冰', '火', '炎',
+      '山', '河', '海', '川', '江', '湖', '波', '涛', '浪', '潮',
+      '天', '地', '玄', '黄', '宇', '宙', '洪', '荒', '日', '月',
+      '星', '辰', '空', '霄', '穹', '苍', '冥', '幽', '明', '光',
+      '剑', '刀', '枪', '戟', '斧', '钺', '钩', '叉', '鞭', '锏',
+      '锤', '抓', '拐', '杖', '棒', '笔', '墨', '纸', '砚', '琴',
+      '棋', '书', '画', '诗', '酒', '茶', '花', '草', '松', '柏',
+      '竹', '梅', '兰', '菊', '莲', '荷', '蓉', '芷', '若', '兰',
+      '青', '白', '黑', '赤', '橙', '黄', '绿', '蓝', '紫', '灰',
+      '金', '银', '铜', '铁', '玉', '石', '珠', '宝', '珍', '瑞',
+      '龙', '凤', '虎', '豹', '狼', '鹰', '鹏', '鹤', '鸾', '麒',
+      '麟', '龟', '蛇', '蛟', '鲤', '鲲', '鳌', '蝉', '蝶', '萤',
+      '飞', '翔', '跃', '腾', '奔', '驰', '疾', '迅', '猛', '威',
+      '霸', '狂', '傲', '孤', '独', '绝', '灭', '杀', '破', '斩',
+      '无双', '至尊', '无极', '太上', '混元', '开天', '辟地', '通天', '彻地', '惊天',
+      '动地', '诛仙', '弑神', '屠魔', '灭佛', '逆天', '改命', '夺舍', '重生', '轮回'
+    ]
+    const surname = surnames[Math.floor(Math.random() * surnames.length)]
+    const name = names[Math.floor(Math.random() * names.length)]
+    return surname + name
   }
 
   // 生成性格/出生/背景选项（根据用户填写的名称）
@@ -152,24 +206,35 @@ export class GameService {
     origins: Array<{ label: string; desc: string }>
     backgrounds: Array<{ label: string; background: string }>
   }> {
-    const prompt = `你是修仙世界的天道，请为名为"${name}"的修士生成角色选项，返回JSON：
+    const prompt = `你是修仙世界的天道，请为名为"${name}"的修士推演命格，生成多样化的角色选项。
+
+要求：
+1. personalities（性格）：生成6个不同性格，男女各3个，每个配一个合适的emoji表情
+2. origins（出生）：生成6个不同出身背景，涵盖各种阶层和境遇
+3. backgrounds（背景故事）：生成6个不同的修仙契机和初始经历
+
+必须返回以下格式的JSON：
 {
   "personalities": [
-    { "gender": "男", "avatar": "🧙‍♂️", "desc": "冷静多谋，不苟言笑" },
-    { "gender": "女", "avatar": "🌸", "desc": "活泼开朗，热情似火" },
-    { "gender": "男", "avatar": "⚔️", "desc": "沉稳守规，意志如铁" }
+    { "gender": "男", "avatar": "🧙‍♂️", "desc": "性格描述，如：冷静多谋，不苟言笑" },
+    { "gender": "女", "avatar": "🌸", "desc": "性格描述" }
+    // ... 共6个，3男3女
   ],
   "origins": [
-    { "label": "世家弃子", "desc": "曾是名门望族，却因故被逐出家门" },
-    { "label": "山野孤儿", "desc": "自幼父母双亡，靠自身摸爬滚打成长" },
-    { "label": "凡人天才", "desc": "生于普通农家，却拥有常人难及的天资" }
+    { "label": "出身标签，如：世家弃子", "desc": "出身描述，如：曾是名门望族，却因故被逐出家门" }
+    // ... 共6个
   ],
   "backgrounds": [
-    { "label": "机缘巧合", "background": "偶然间得到一本残缺古籍，从此踏上修仙路" },
-    { "label": "家仇国恨", "background": "家人惨遭杀害，为报仇雪恨而踏入仙途" },
-    { "label": "追逐长生", "background": "目睹至亲病逝，立志追求长生之道" }
+    { "label": "背景标签，如：机缘巧合", "background": "详细背景故事，50-80字" }
+    // ... 共6个
   ]
-}`
+}
+
+注意：
+- 内容要有修仙特色，避免过于现代化的表达
+- 性格和出身要有关联性，比如孤僻性格配寒门出身更合理
+- 背景故事要详细具体，能引发后续的剧情发展`
+
     const messages = [
       { role: 'system' as const, content: '你是修仙世界的天道意志，请生成多样化的角色选项，必须返回有效JSON。' },
       { role: 'user' as const, content: prompt },
@@ -275,7 +340,35 @@ export class GameService {
     // 记录 token 使用量
     this.recordTokenUsage(response.usage)
 
-    const result: StoryResult = JSON.parse(response.content)
+    const parsed = JSON.parse(response.content)
+
+    // 添加默认值防止NaN
+    const result: StoryResult = {
+      story: parsed.story || '无事发生',
+      timePassed: {
+        year: Number(parsed.timePassed?.year) || 0,
+        month: Number(parsed.timePassed?.month) || 0,
+        day: Number(parsed.timePassed?.day) || 0,
+        shichen: Number(parsed.timePassed?.shichen) || 0,
+      },
+      cultivationGained: Number(parsed.cultivationGained) || 0,
+      spiritualEnergyGained: Number(parsed.spiritualEnergyGained) || 0,
+      breakthrough: {
+        occurred: Boolean(parsed.breakthrough?.occurred),
+        success: Boolean(parsed.breakthrough?.success),
+        newRealm: parsed.breakthrough?.newRealm || '',
+        newMinorRealm: parsed.breakthrough?.newMinorRealm || '',
+      },
+      statChanges: parsed.statChanges || {},
+      itemsGained: parsed.itemsGained || [],
+      itemsLost: parsed.itemsLost || [],
+      skillsGained: parsed.skillsGained || [],
+      skillsImproved: parsed.skillsImproved || [],
+      npcsMet: parsed.npcsMet || [],
+      relationshipsUpdate: parsed.relationshipsUpdate || {},
+      events: parsed.events || [],
+      suggestedActions: parsed.suggestedActions || [],
+    }
 
     // 记录到记忆
     await this.memoryService.addMemory(
