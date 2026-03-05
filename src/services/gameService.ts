@@ -5,7 +5,8 @@ import { db } from './db'
 import { useTokenStore } from '@/stores/useTokenStore'
 import { characterSystemPrompt, characterGenerationPrompt } from '@/prompts/character'
 import { storySystemPrompt, storyGenerationPrompt } from '@/prompts/story'
-import type { Player, GameLog, NPC, Item, Skill, GameState, Time } from '@/types/game'
+import { npcInteractSystemPrompt, npcInteractGenerationPrompt } from '@/prompts/npcInteract'
+import type { Player, GameLog, NPC, Item, Skill, GameState, Time, NPCInteractResult } from '@/types/game'
 
 export interface GeneratedCharacter {
   characters: Player[]
@@ -409,6 +410,130 @@ export class GameService {
 
   private generateId(): string {
     return Math.random().toString(36).substring(2, 15)
+  }
+
+  // NPC 交互
+  async interactWithNPC(
+    npc: NPC,
+    player: Player,
+    currentLocation: string,
+    action: string
+  ): Promise<NPCInteractResult> {
+    if (!this.memoryService) {
+      throw new Error('GameService not initialized')
+    }
+
+    const messages = [
+      { role: 'system' as const, content: npcInteractSystemPrompt },
+      { role: 'user' as const, content: npcInteractGenerationPrompt({
+        npc,
+        player,
+        action,
+        currentLocation,
+      })},
+    ]
+
+    const response = await this.llmService.generate(messages, {
+      temperature: 0.7,
+      response_format: { type: 'json_object' },
+    })
+
+    // 记录 token 使用量
+    this.recordTokenUsage(response.usage)
+
+    const parsed = JSON.parse(response.content)
+
+    // 添加默认值
+    const result: NPCInteractResult = {
+      dialogue: parsed.dialogue || '...',
+      possibleInteractions: parsed.possibleInteractions || [],
+      npcStateDelta: {
+        favor: Number(parsed.npcStateDelta?.favor) || 0,
+        memoryTags: parsed.npcStateDelta?.memoryTags || [],
+        revealedAttributes: Boolean(parsed.npcStateDelta?.revealedAttributes),
+        relationshipDesc: parsed.npcStateDelta?.relationshipDesc || npc.relationshipDesc,
+      },
+      playerStateDelta: parsed.playerStateDelta || {},
+      timePassed: parsed.timePassed || { years: 0, months: 0, days: 0, shichen: 1 },
+      storyUpdate: parsed.storyUpdate,
+    }
+
+    // 记录到记忆
+    await this.memoryService.addMemory(
+      `与 ${npc.name} 互动: ${action}\n结果: ${result.dialogue.slice(0, 100)}...`,
+      'NPC 交互',
+      6
+    )
+
+    return result
+  }
+
+  // 生成区域 NPC
+  async generateLocationNPCs(
+    location: string,
+    locationDescription: string,
+    player: Player,
+    count: number = 3
+  ): Promise<NPC[]> {
+    const prompt = `你是九霄界的"天道推演者"。
+
+当前区域：${location}
+区域描述：${locationDescription}
+玩家境界：${player.realm}·${player.minorRealm}
+
+请为该区域生成 ${count} 个 NPC，这些 NPC 应该：
+1. 符合区域特点（如：山麓可能有采药人、散修；宗门可能有弟子、长老）
+2. 境界应该与玩家相当或略高/略低（不要差距太大）
+3. 性格各异，有正有邪
+4. 初始好感度为 0（陌生）
+
+返回 JSON 格式：
+{
+  "npcs": [
+    {
+      "id": "npc_随机id",
+      "name": "姓名",
+      "emoji": "外观emoji",
+      "avatar": "头像emoji",
+      "realm": "炼气期",
+      "minorRealm": "初期",
+      "identity": "身份描述，如：青云宗外门弟子",
+      "favor": 0,
+      "favorLevel": "陌生",
+      "description": "详细描述",
+      "history": [],
+      "talents": ["天赋1", "天赋2"],
+      "personality": "性格描述",
+      "relationships": {},
+      "revealedAttributes": false,
+      "memoryTags": ["初始标签"],
+      "interactionCount": 0
+    }
+  ]
+}`
+
+    const messages = [
+      { role: 'system' as const, content: '你是修仙世界的造物主，请生成符合区域特色的NPC，必须返回有效JSON。' },
+      { role: 'user' as const, content: prompt },
+    ]
+
+    const response = await this.llmService.generate(messages, {
+      temperature: 0.8,
+      response_format: { type: 'json_object' },
+    })
+
+    this.recordTokenUsage(response.usage)
+
+    const result = JSON.parse(response.content)
+    return (result.npcs || []).map((npc: NPC) => ({
+      ...npc,
+      id: npc.id || this.generateId(),
+      favor: npc.favor ?? 0,
+      favorLevel: npc.favorLevel || '陌生',
+      memoryTags: npc.memoryTags || [],
+      revealedAttributes: npc.revealedAttributes ?? false,
+      interactionCount: npc.interactionCount ?? 0,
+    }))
   }
 }
 
