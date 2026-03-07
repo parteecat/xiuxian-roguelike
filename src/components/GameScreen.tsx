@@ -4,10 +4,13 @@ import { StoryLog } from './StoryLog'
 import { ActionInput } from './ActionInput'
 import { TokenDisplay } from './TokenDisplay'
 import { ImmersionLoading } from './ImmersionLoading'
+import { MapPanel } from './MapPanel'
+import { NPCPanel } from './NPCPanel'
+import { NPCInteractModal } from './NPCInteractModal'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, Sun, Moon } from 'lucide-react'
 import { useSettingsStore } from '@/stores/useSettingsStore'
-import type { Player, GameLog, World } from '@/types/game'
+import type { Player, GameLog, World, NPC, NPCInteractResult } from '@/types/game'
 
 interface GameScreenProps {
   player: Player
@@ -17,6 +20,13 @@ interface GameScreenProps {
   suggestions: string[]
   onActionSubmit: (action: string) => void
   onReturnHome?: () => void
+  // NPC 相关
+  nearbyNPCs: NPC[]
+  selectedNPC: NPC | null
+  isNPCInteracting: boolean
+  onSelectNPC: (npc: NPC) => void
+  onCloseNPCModal: () => void
+  onNPCInteract: (action: string) => Promise<NPCInteractResult>
 }
 
 export function GameScreen({
@@ -27,6 +37,12 @@ export function GameScreen({
   suggestions,
   onActionSubmit,
   onReturnHome,
+  nearbyNPCs,
+  selectedNPC,
+  isNPCInteracting,
+  onSelectNPC,
+  onCloseNPCModal,
+  onNPCInteract,
 }: GameScreenProps) {
   const { theme, setTheme } = useSettingsStore()
 
@@ -87,30 +103,51 @@ export function GameScreen({
         {/* 顶部分隔线 */}
         <div className="h-px bg-gradient-to-r from-transparent via-emerald-500/20 to-transparent mb-4 flex-shrink-0" />
 
-        {/* 主内容区 */}
+        {/* 主内容区 - 三栏布局 */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0">
           {/* 左侧：角色状态面板 */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="lg:col-span-4 xl:col-span-3 min-h-0"
+            className="lg:col-span-3 min-h-0"
           >
             <StatusPanel player={player} />
           </motion.div>
 
-          {/* 右侧：剧情日志和行动输入 */}
+          {/* 中间：修仙历程和行动输入 */}
           <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
-            className="lg:col-span-8 xl:col-span-9 flex flex-col gap-3 min-h-0"
+            className="lg:col-span-6 flex flex-col gap-3 min-h-0"
           >
             <StoryLog logs={logs} />
             <ActionInput
               onSubmit={onActionSubmit}
               isLoading={isLoading}
               suggestions={suggestions}
+            />
+          </motion.div>
+
+          {/* 右侧：区域信息和人物信息 */}
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+            className="lg:col-span-3 flex flex-col gap-3 min-h-0"
+          >
+            {/* 地图面板 */}
+            <MapPanel
+              currentLocation={world?.currentLocation || '未知之地'}
+              locationDescription={world?.locationDescription}
+            />
+
+            {/* NPC 面板 */}
+            <NPCPanel
+              npcs={nearbyNPCs}
+              onSelectNPC={onSelectNPC}
+              isLoading={isLoading}
             />
           </motion.div>
         </div>
@@ -121,6 +158,14 @@ export function GameScreen({
 
       {/* 沉浸式加载 - 剧情推演中 */}
       <ImmersionLoading isLoading={isLoading} type="story" />
+
+      {/* NPC 互动模态框 */}
+      <NPCInteractModal
+        npc={selectedNPC}
+        isOpen={isNPCInteracting}
+        onClose={onCloseNPCModal}
+        onInteract={onNPCInteract}
+      />
     </div>
   )
 }

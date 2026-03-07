@@ -2,15 +2,16 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { StartScreen } from './components/StartScreen'
 import { CharacterCreationScreen } from './components/CharacterCreationScreen'
 import { GameScreen } from './components/GameScreen'
-import { useGameStore } from './stores/useGameStore'
+import { useGameStore, getNearbyNPCs } from './stores/useGameStore'
 import { useSettingsStore } from './stores/useSettingsStore'
 import { createLLMService } from './services/llmService'
 import { createGameService } from './services/gameService'
 import { db } from './services/db'
 import { Toaster } from '@/components/ui/sonner'
 import { toast } from 'sonner'
-import type { Player } from './types/game'
+import type { Player, NPC, NPCInteractResult } from './types/game'
 import type { Relationship } from '@/types/game'
+import { getFavorLevel } from './types/game'
 
 function App() {
   // 游戏阶段：start(主页) -> character_creation(角色创建) -> game(游戏主界面)
@@ -29,17 +30,29 @@ function App() {
   // Store
   const {
     player,
+    npcs,
     world,
     logs,
     saveId,
+    selectedNPCId,
+    isNPCInteracting,
     setPlayer,
     updatePlayer,
+    addNpc,
+    updateNpc,
+    updateNearbyNPCs,
     addLog,
     initWorld,
     setWorld,
     incrementTurn,
     updateLastSavedAt,
+    setSelectedNPC,
+    setNPCInteracting,
   } = useGameStore()
+
+  // 获取附近 NPC
+  const nearbyNPCs = getNearbyNPCs(npcs, world?.nearbyNPCs || [])
+  const selectedNPC = selectedNPCId ? npcs.find(n => n.id === selectedNPCId) || null : null
 
   const { llmConfig } = useSettingsStore()
 
@@ -78,6 +91,8 @@ function App() {
           isPlaying: gameState.isPlaying,
           isLoading: gameState.isLoading,
           error: gameState.error,
+          selectedNPCId: gameState.selectedNPCId,
+          isNPCInteracting: gameState.isNPCInteracting,
         },
       }
 
@@ -160,7 +175,7 @@ function App() {
       setPlayer(character)
 
       // 初始化世界
-      const initialWorld = initWorld(character.background)
+      const initialWorld = initWorld()
       setWorld(initialWorld)
 
       // 初始化游戏服务
@@ -174,6 +189,22 @@ function App() {
       // 自动生成初始剧情
       setIsLoading(true)
       try {
+        // 生成初始 NPC
+        const initialNPCs = await gameServiceWithMemory.generateLocationNPCs(
+          initialWorld.currentLocation,
+          initialWorld.locationDescription || '灵气氤氲之地',
+          character,
+          3
+        )
+
+        // 添加 NPC 到 store
+        for (const npc of initialNPCs) {
+          addNpc(npc)
+        }
+
+        // 更新附近 NPC 列表
+        updateNearbyNPCs(initialNPCs.map(npc => npc.id))
+
         const result = await gameServiceWithMemory.generateStory(
           character,
           initialWorld,
@@ -202,7 +233,7 @@ function App() {
         setIsLoading(false)
       }
     },
-    [setPlayer, initWorld, setWorld, addLog, gameServiceWithMemory, autoSave]
+    [setPlayer, initWorld, setWorld, addLog, addNpc, updateNearbyNPCs, gameServiceWithMemory, autoSave]
   )
 
   // 处理玩家行动
@@ -343,7 +374,8 @@ function App() {
           for (const npc of result.npcsMet) {
             const npcId = npc.id || Math.random().toString(36).substring(2, 15)
             const existingRelationship = newRelationships[npc.name]
-            const relationshipChange = npc.relationshipChange || 0
+            // 使用新的 NPC 类型中的 favor 属性，默认 0
+            const relationshipChange = (npc as NPC).favor || 0
 
             if (existingRelationship) {
               existingRelationship.favorability += relationshipChange
@@ -435,6 +467,86 @@ function App() {
     [player, world, logs, updatePlayer, addLog, incrementTurn, autoSave]
   )
 
+  // NPC 相关处理方法
+  const handleSelectNPC = useCallback((npc: NPC) => {
+    setSelectedNPC(npc.id)
+    setNPCInteracting(true)
+  }, [setSelectedNPC, setNPCInteracting])
+
+  const handleCloseNPCModal = useCallback(() => {
+    setNPCInteracting(false)
+    setSelectedNPC(null)
+  }, [setNPCInteracting, setSelectedNPC])
+
+  const handleNPCInteract = useCallback(async (action: string): Promise<NPCInteractResult> => {
+    if (!selectedNPC || !player || !world) {
+      throw new Error('缺少必要的数据')
+    }
+
+    const result = await gameServiceWithMemory.interactWithNPC(
+      selectedNPC,
+      player,
+      world.currentLocation,
+      action
+    )
+
+    // 更新 NPC 状态
+    if (result.npcStateDelta) {
+      const updates: Partial<NPC> = {}
+      if (result.npcStateDelta.favor !== undefined) {
+        updates.favor = selectedNPC.favor + result.npcStateDelta.favor
+        updates.favorLevel = getFavorLevel(updates.favor)
+      }
+      if (result.npcStateDelta.revealedAttributes !== undefined) {
+        updates.revealedAttributes = result.npcStateDelta.revealedAttributes
+      }
+      if (result.npcStateDelta.memoryTags) {
+        updates.memoryTags = [...selectedNPC.memoryTags, ...result.npcStateDelta.memoryTags]
+      }
+      if (result.npcStateDelta.relationshipDesc) {
+        updates.relationshipDesc = result.npcStateDelta.relationshipDesc
+      }
+      updateNpc(selectedNPC.id, updates)
+    }
+
+    // 更新玩家状态
+    if (result.playerStateDelta) {
+      const playerUpdates: Partial<Player> = {}
+      if (result.playerStateDelta.health) {
+        playerUpdates.health = Math.max(0, player.health + result.playerStateDelta.health)
+      }
+      if (result.playerStateDelta.spiritualPower) {
+        playerUpdates.spiritualPower = Math.max(0, player.spiritualPower + result.playerStateDelta.spiritualPower)
+      }
+      if (result.playerStateDelta.itemsGained) {
+        playerUpdates.inventory = [...(player.inventory || []), ...result.playerStateDelta.itemsGained]
+      }
+      updatePlayer(playerUpdates)
+    }
+
+    // 添加剧情更新
+    if (result.storyUpdate) {
+      addLog({
+        type: 'event',
+        content: result.storyUpdate,
+      })
+    }
+
+    // 更新时间
+    if (result.timePassed) {
+      const updatedPlayer = { ...player }
+      const yearsPassed = Number(result.timePassed.year) || 0
+      const monthsPassed = Number(result.timePassed.month) || 0
+      const daysPassed = Number(result.timePassed.day) || 0
+      updatedPlayer.age += yearsPassed + monthsPassed / 12 + daysPassed / 365
+      const lifespanCost = yearsPassed * 1 + monthsPassed * 0.1 + daysPassed * 0.01
+      updatedPlayer.lifespan -= lifespanCost
+      updatePlayer(updatedPlayer)
+    }
+
+    return result
+  }, [selectedNPC, player, world, gameServiceWithMemory, updateNpc, updatePlayer, addLog])
+
   return (
     <div className="min-h-screen bg-background">
       {gamePhase === 'start' && (
@@ -458,6 +570,12 @@ function App() {
           suggestions={actionSuggestions}
           onActionSubmit={handleActionSubmit}
           onReturnHome={handleReturnHome}
+          nearbyNPCs={nearbyNPCs}
+          selectedNPC={selectedNPC}
+          isNPCInteracting={isNPCInteracting}
+          onSelectNPC={handleSelectNPC}
+          onCloseNPCModal={handleCloseNPCModal}
+          onNPCInteract={handleNPCInteract}
         />
       )}
 

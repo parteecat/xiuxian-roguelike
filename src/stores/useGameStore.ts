@@ -24,6 +24,9 @@ interface GameStore {
   error: string | null
   saveId: string | null
   lastSavedAt: number | null
+  // NPC 交互状态
+  selectedNPCId: string | null
+  isNPCInteracting: boolean
 
   setPlayer: (player: Player | null) => void
   updatePlayer: (updates: Partial<Player>) => void
@@ -31,7 +34,7 @@ interface GameStore {
   updateNpc: (npcId: string, updates: Partial<NPC>) => void
   removeNpc: (npcId: string) => void
   setWorld: (world: World | null) => void
-  initWorld: (background: string) => World
+  initWorld: () => World
   updateTime: (time: Partial<Time>) => void
   addLog: (log: Omit<GameLog, 'id' | 'timestamp'>) => void
   addEvent: (event: Omit<Event, 'id'>) => void
@@ -45,6 +48,10 @@ interface GameStore {
   updateLastSavedAt: () => void
   resetGame: () => void
   loadGame: (state: Partial<GameStore>) => void
+  // NPC 交互方法
+  setSelectedNPC: (npcId: string | null) => void
+  setNPCInteracting: (isInteracting: boolean) => void
+  updateNearbyNPCs: (npcIds: string[]) => void
 }
 
 const generateId = (): string => {
@@ -65,6 +72,13 @@ const initialState = {
   error: null,
   saveId: null,
   lastSavedAt: null,
+  selectedNPCId: null,
+  isNPCInteracting: false,
+}
+
+// 独立导出获取附近 NPC 的函数
+export function getNearbyNPCs(npcs: NPC[], nearbyNPCIds: string[]): NPC[] {
+  return npcs.filter((npc) => nearbyNPCIds.includes(npc.id))
 }
 
 export const useGameStore = create<GameStore>()(
@@ -109,6 +123,8 @@ export const useGameStore = create<GameStore>()(
             shichen: 1,
           },
           factions: ['天剑宗', '万妖谷', '散修联盟', '丹鼎阁'],
+          nearbyNPCs: [],
+          locationDescription: '灵气氤氲的山麓，偶有修士来往',
         }
         set({ world })
         return world
@@ -171,6 +187,22 @@ export const useGameStore = create<GameStore>()(
       resetGame: () => set(initialState),
 
       loadGame: (state) => set((prev) => ({ ...prev, ...state })),
+
+      // NPC 交互方法实现
+      setSelectedNPC: (npcId) => set({ selectedNPCId: npcId }),
+
+      setNPCInteracting: (isInteracting) => set({ isNPCInteracting: isInteracting }),
+
+      updateNearbyNPCs: (npcIds) =>
+        set((state) => {
+          if (!state.world) return state
+          return {
+            world: {
+              ...state.world,
+              nearbyNPCs: npcIds,
+            },
+          }
+        }),
     }),
     {
       name: 'xiuxian-game-storage',
