@@ -9,9 +9,11 @@ import type {
   Memory,
   Time,
 } from '@/types/game'
+import type { MetaState, RunState } from '@/types/run'
 
 interface GameStore {
   player: Player | null
+  runState: RunState | null
   npcs: NPC[]
   world: World | null
   logs: GameLog[]
@@ -24,11 +26,14 @@ interface GameStore {
   error: string | null
   saveId: string | null
   lastSavedAt: number | null
+  metaProgress: MetaState
   // NPC 交互状态
   selectedNPCId: string | null
   isNPCInteracting: boolean
 
   setPlayer: (player: Player | null) => void
+  setRunState: (runState: RunState | null) => void
+  updateRunState: (updater: RunState | ((state: RunState) => RunState) | null) => void
   updatePlayer: (updates: Partial<Player>) => void
   addNpc: (npc: NPC) => void
   updateNpc: (npcId: string, updates: Partial<NPC>) => void
@@ -46,6 +51,8 @@ interface GameStore {
   setError: (error: string | null) => void
   setSaveId: (saveId: string | null) => void
   updateLastSavedAt: () => void
+  setMetaProgress: (meta: MetaState) => void
+  mergeMetaProgress: (meta: Partial<MetaState>) => void
   resetGame: () => void
   loadGame: (state: Partial<GameStore>) => void
   // NPC 交互方法
@@ -60,6 +67,7 @@ const generateId = (): string => {
 
 const initialState = {
   player: null,
+  runState: null,
   npcs: [],
   world: null,
   logs: [],
@@ -72,6 +80,13 @@ const initialState = {
   error: null,
   saveId: null,
   lastSavedAt: null,
+  metaProgress: {
+    unlockedBackgrounds: [],
+    unlockedTalents: [],
+    unlockedWorldTags: [],
+    unlockedRelics: [],
+    achievementFlags: [],
+  },
   selectedNPCId: null,
   isNPCInteracting: false,
 }
@@ -87,6 +102,23 @@ export const useGameStore = create<GameStore>()(
       ...initialState,
 
       setPlayer: (player) => set({ player }),
+
+      setRunState: (runState) => set({ runState }),
+
+      updateRunState: (updater) =>
+        set((state) => {
+          if (updater === null) {
+            return { runState: null }
+          }
+
+          if (typeof updater === 'function') {
+            return {
+              runState: state.runState ? updater(state.runState) : null,
+            }
+          }
+
+          return { runState: updater }
+        }),
 
       updatePlayer: (updates) =>
         set((state) => ({
@@ -184,7 +216,34 @@ export const useGameStore = create<GameStore>()(
 
       updateLastSavedAt: () => set({ lastSavedAt: Date.now() }),
 
-      resetGame: () => set(initialState),
+      setMetaProgress: (meta) => set({ metaProgress: meta }),
+
+      mergeMetaProgress: (meta) =>
+        set((state) => ({
+          metaProgress: {
+            unlockedBackgrounds: Array.from(
+              new Set([...state.metaProgress.unlockedBackgrounds, ...(meta.unlockedBackgrounds ?? [])]),
+            ),
+            unlockedTalents: Array.from(
+              new Set([...state.metaProgress.unlockedTalents, ...(meta.unlockedTalents ?? [])]),
+            ),
+            unlockedWorldTags: Array.from(
+              new Set([...state.metaProgress.unlockedWorldTags, ...(meta.unlockedWorldTags ?? [])]),
+            ),
+            unlockedRelics: Array.from(
+              new Set([...state.metaProgress.unlockedRelics, ...(meta.unlockedRelics ?? [])]),
+            ),
+            achievementFlags: Array.from(
+              new Set([...state.metaProgress.achievementFlags, ...(meta.achievementFlags ?? [])]),
+            ),
+          },
+        })),
+
+      resetGame: () =>
+        set((state) => ({
+          ...initialState,
+          metaProgress: state.metaProgress,
+        })),
 
       loadGame: (state) => set((prev) => ({ ...prev, ...state })),
 
@@ -209,6 +268,7 @@ export const useGameStore = create<GameStore>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         player: state.player,
+        runState: state.runState,
         npcs: state.npcs,
         world: state.world,
         logs: state.logs,
@@ -219,6 +279,7 @@ export const useGameStore = create<GameStore>()(
         isPlaying: state.isPlaying,
         saveId: state.saveId,
         lastSavedAt: state.lastSavedAt,
+        metaProgress: state.metaProgress,
       }),
     }
   )

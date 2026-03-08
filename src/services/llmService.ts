@@ -22,6 +22,10 @@ export class LLMService {
     this.config = config
   }
 
+  isConfigured(): boolean {
+    return Boolean(this.config.baseURL && this.config.apiKey && this.config.model)
+  }
+
   updateConfig(config: Partial<LLMConfig>) {
     this.config = { ...this.config, ...config }
   }

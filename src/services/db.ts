@@ -1,5 +1,3 @@
-import { GameState } from '@/types/game'
-
 const DB_NAME = 'xiuxian_roguelike_db'
 const DB_VERSION = 1
 
@@ -20,7 +18,7 @@ export interface SaveMeta {
 
 export interface SaveData {
   saveId: string
-  data: GameState
+  data: Record<string, unknown>
 }
 
 export interface MemoryItem {

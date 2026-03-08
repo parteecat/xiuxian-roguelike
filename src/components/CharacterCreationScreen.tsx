@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { TokenDisplay } from './TokenDisplay'
 import { ImmersionLoading, MiniLoading } from './ImmersionLoading'
 import { ArrowLeft, ArrowRight, Check, RefreshCw, Heart, Zap, Sword, Shield, Wind, Sparkles } from 'lucide-react'
+import { useGameStore } from '@/stores/useGameStore'
 import type { Player } from '@/types/game'
 import type { GameService } from '@/services/gameService'
 import { toast } from 'sonner'
@@ -45,6 +46,7 @@ export function CharacterCreationScreen({
   onSelectCharacter,
   onReturnHome,
 }: CharacterCreationScreenProps) {
+  const metaProgress = useGameStore((state) => state.metaProgress)
   const [step, setStep] = useState<StepId>('name_stats')
   const [isLoading, setIsLoading] = useState(false)
 
@@ -61,6 +63,29 @@ export function CharacterCreationScreen({
 
   const [talentOptions, setTalentOptions] = useState<TalentOption[]>([])
   const [selectedTalents, setSelectedTalents] = useState<Set<number>>(new Set())
+
+  const injectUnlockedBackgrounds = useCallback((items: BackgroundOption[]) => {
+    const metaBackgrounds = metaProgress.unlockedBackgrounds
+      .filter((item) => !items.some((existing) => existing.label === item))
+      .map((item) => ({
+        label: item,
+        background: `前世余响让你这一次以“${item}”的姿态入局，起点带着更清晰的命运回声。`,
+      }))
+
+    return [...metaBackgrounds, ...items].slice(0, 8)
+  }, [metaProgress.unlockedBackgrounds])
+
+  const injectUnlockedTalents = useCallback((items: TalentOption[]) => {
+    const metaTalents = metaProgress.unlockedTalents
+      .filter((item) => !items.some((existing) => existing.name === item))
+      .map((item) => ({
+        name: item,
+        desc: `来自前世结算解锁的额外天赋：“${item}”。`,
+        type: '前世解锁',
+      }))
+
+    return [...metaTalents, ...items].slice(0, 8)
+  }, [metaProgress.unlockedTalents])
 
   const rerollStats = useCallback(() => {
     setStatPanels(gameService.generateStatPanels())
@@ -79,7 +104,7 @@ export function CharacterCreationScreen({
       const data = await gameService.generatePersonalityOptions(name.trim())
       setPersonalities(data.personalities || [])
       setOrigins(data.origins || [])
-      setBackgrounds(data.backgrounds || [])
+      setBackgrounds(injectUnlockedBackgrounds(data.backgrounds || []))
       // 重置选择
       setSelectedPersonalityIdx(null)
       setSelectedOriginIdx(null)
@@ -90,7 +115,7 @@ export function CharacterCreationScreen({
     } finally {
       setIsLoading(false)
     }
-  }, [name, selectedStatIdx, gameService])
+  }, [gameService, injectUnlockedBackgrounds, name, selectedStatIdx])
 
   const handleStep2Next = useCallback(async () => {
     if (selectedPersonalityIdx === null) { toast.error('请选择性格'); return }
@@ -101,7 +126,7 @@ export function CharacterCreationScreen({
       const o = origins[selectedOriginIdx]
       const b = backgrounds[selectedBackgroundIdx]
       const data = await gameService.generateTalentOptions(name, o.label, b.background)
-      setTalentOptions(data.talents || [])
+      setTalentOptions(injectUnlockedTalents(data.talents || []))
       setSelectedTalents(new Set())
       setStep('talents')
     } catch {
@@ -109,7 +134,7 @@ export function CharacterCreationScreen({
     } finally {
       setIsLoading(false)
     }
-  }, [selectedPersonalityIdx, selectedOriginIdx, selectedBackgroundIdx, origins, backgrounds, name, gameService])
+  }, [backgrounds, gameService, injectUnlockedTalents, name, origins, selectedBackgroundIdx, selectedOriginIdx, selectedPersonalityIdx])
 
   const rerollTalents = useCallback(async () => {
     if (selectedOriginIdx === null || selectedBackgroundIdx === null) return
@@ -118,14 +143,14 @@ export function CharacterCreationScreen({
       const o = origins[selectedOriginIdx]
       const b = backgrounds[selectedBackgroundIdx]
       const data = await gameService.generateTalentOptions(name, o.label, b.background)
-      setTalentOptions(data.talents || [])
+      setTalentOptions(injectUnlockedTalents(data.talents || []))
       setSelectedTalents(new Set())
     } catch {
       toast.error('天机推演受阻，请重试')
     } finally {
       setIsLoading(false)
     }
-  }, [selectedOriginIdx, selectedBackgroundIdx, origins, backgrounds, name, gameService])
+  }, [backgrounds, gameService, injectUnlockedTalents, name, origins, selectedBackgroundIdx, selectedOriginIdx])
 
   const toggleTalent = (idx: number) => {
     setSelectedTalents(prev => {
@@ -185,6 +210,35 @@ export function CharacterCreationScreen({
             <h1 className="text-2xl font-bold jade-text tracking-[0.2em]">踏入仙途</h1>
           </div>
         </motion.div>
+
+        {(metaProgress.unlockedBackgrounds.length > 0 || metaProgress.unlockedTalents.length > 0) && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.05 }}
+            className="ink-card rounded-xl p-4 mb-8 space-y-3"
+          >
+            <div className="text-xs text-[hsl(var(--dim))] tracking-[0.2em] uppercase">前世残响已注入本次命格</div>
+            <div className="flex flex-wrap gap-2">
+              {metaProgress.unlockedBackgrounds.slice(0, 2).map((item) => (
+                <span
+                  key={item}
+                  className="rounded-full border border-emerald-500/15 bg-emerald-500/5 px-2 py-1 text-[10px] text-emerald-300"
+                >
+                  背景：{item}
+                </span>
+              ))}
+              {metaProgress.unlockedTalents.slice(0, 2).map((item) => (
+                <span
+                  key={item}
+                  className="rounded-full border border-sky-500/15 bg-sky-500/5 px-2 py-1 text-[10px] text-sky-300"
+                >
+                  天赋：{item}
+                </span>
+              ))}
+            </div>
+          </motion.div>
+        )}
 
         {/* 步骤指示器 */}
         <motion.div

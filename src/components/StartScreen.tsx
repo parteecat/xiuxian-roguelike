@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Settings, Play, RefreshCw, Trash2, Clock, AlertCircle, Sun, Moon } from 'lucide-react'
+import { Settings, Play, RefreshCw, Trash2, Clock, Sun, Moon } from 'lucide-react'
 import { useGameStore } from '@/stores/useGameStore'
 import { useSettingsStore } from '@/stores/useSettingsStore'
 import { SettingsPanel } from './SettingsPanel'
+import { REALM_LABELS } from '@/services/runEngine'
 import { toast } from 'sonner'
 
 interface StartScreenProps {
@@ -14,18 +15,19 @@ interface StartScreenProps {
 }
 
 export function StartScreen({ onStart, onContinue }: StartScreenProps) {
-  const { player, resetGame, lastSavedAt } = useGameStore()
+  const { player, runState, resetGame, lastSavedAt, metaProgress } = useGameStore()
   const { llmConfig, theme, setTheme } = useSettingsStore()
   const [showSettings, setShowSettings] = useState(false)
   const [showConfirmNew, setShowConfirmNew] = useState(false)
-  const [showNoModel, setShowNoModel] = useState(false)
 
-  // 数据容错处理
-  const safeAge = player?.age ?? 18
-  const safeLifespan = player?.lifespan ?? 120
-  const safeMaxLifespan = player?.maxLifespan ?? 120
-  const safeRealm = player?.realm ?? '炼气期'
-  const safeMinorRealm = player?.minorRealm ?? '初期'
+  const hasSave = Boolean(runState || player)
+  const safeAge = runState?.world.age ?? player?.age ?? 18
+  const safeLifespan = runState?.player.lifespan ?? player?.lifespan ?? 120
+  const safeMaxLifespan = runState?.player.lifespanMax ?? player?.maxLifespan ?? 120
+  const safeRealm = runState ? REALM_LABELS[runState.player.realm] : player?.realm ?? '炼气期'
+  const safeMinorRealm = runState ? '' : player?.minorRealm ?? '初期'
+  const displayName = runState?.player.name ?? player?.name ?? '无名散修'
+  const displayAvatar = runState?.player.avatar ?? player?.avatar ?? '🧙'
 
   const isModelConfigured = () =>
     !!(llmConfig.baseURL && llmConfig.apiKey && llmConfig.model)
@@ -34,13 +36,13 @@ export function StartScreen({ onStart, onContinue }: StartScreenProps) {
 
   const handleConfirmNew = () => {
     setShowConfirmNew(false)
-    if (!isModelConfigured()) {
-      setShowNoModel(true)
-      return
-    }
     resetGame()
     onStart()
-    toast.info('踏入仙途，修仙之旅即将开始…')
+    if (isModelConfigured()) {
+      toast.info('踏入仙途，修仙之旅即将开始…')
+    } else {
+      toast.info('未配置模型，将以本地规则模式开始修行')
+    }
   }
 
   const formatLastSaved = () => {
@@ -137,13 +139,13 @@ export function StartScreen({ onStart, onContinue }: StartScreenProps) {
             transition={{ delay: 0.4, duration: 0.8 }}
             className="text-[hsl(var(--dim))] tracking-[0.3em] text-xs uppercase"
           >
-            AI 驱动的修仙 Roguelike
+            以阶段推进与因果回收驱动的修仙人生模拟器
           </motion.p>
         </div>
 
         {/* 存档信息卡片 */}
         <AnimatePresence>
-          {player && (
+          {hasSave && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -154,14 +156,14 @@ export function StartScreen({ onStart, onContinue }: StartScreenProps) {
               <div className="flex items-center gap-4">
                 <div className="relative">
                   <div className="w-14 h-14 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-3xl">
-                    {player.avatar}
+                    {displayAvatar}
                   </div>
                   <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-background" />
                 </div>
                 <div className="flex-1 text-left">
-                  <div className="font-semibold text-foreground tracking-wide">{player.name}</div>
+                  <div className="font-semibold text-foreground tracking-wide">{displayName}</div>
                   <div className="text-sm text-emerald-400 mt-0.5 tracking-wider">
-                    {safeRealm} · {safeMinorRealm}
+                    {safeMinorRealm ? `${safeRealm} · ${safeMinorRealm}` : safeRealm}
                   </div>
                   <div className="text-xs text-[hsl(var(--dim))] mt-1">
                     第 {Math.floor(safeAge)} 年 · 寿元 {Math.floor(safeLifespan)}/{safeMaxLifespan}
@@ -185,7 +187,7 @@ export function StartScreen({ onStart, onContinue }: StartScreenProps) {
           transition={{ delay: 0.5, duration: 0.6 }}
           className="space-y-3"
         >
-          {player && (
+          {hasSave && (
             <motion.div whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}>
               <Button
                 onClick={onContinue}
@@ -204,15 +206,42 @@ export function StartScreen({ onStart, onContinue }: StartScreenProps) {
               size="lg"
               variant="outline"
               className={`w-full py-6 text-lg tracking-widest font-medium rounded-xl transition-all duration-200 ${
-                player
+                hasSave
                   ? 'border-[hsl(var(--ink-border))] text-[hsl(var(--dim))] hover:border-emerald-500/30 hover:text-foreground hover:bg-emerald-500/5'
                   : 'border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/50'
               }`}
             >
               <RefreshCw className="w-5 h-5 mr-3" />
-              {player ? '重新转世' : '踏入仙途'}
+              {hasSave ? '重新转世' : '踏入仙途'}
             </Button>
           </motion.div>
+
+          {(metaProgress.unlockedBackgrounds.length > 0 || metaProgress.unlockedTalents.length > 0) && (
+            <div className="ink-card rounded-xl p-4 text-left space-y-3">
+              <div className="text-xs text-[hsl(var(--dim))] tracking-[0.2em] uppercase">前世残响</div>
+              <div className="flex flex-wrap gap-2">
+                {metaProgress.unlockedBackgrounds.slice(0, 2).map((item) => (
+                  <span
+                    key={item}
+                    className="rounded-full border border-emerald-500/15 bg-emerald-500/5 px-2 py-1 text-[10px] text-emerald-300"
+                  >
+                    背景：{item}
+                  </span>
+                ))}
+                {metaProgress.unlockedTalents.slice(0, 2).map((item) => (
+                  <span
+                    key={item}
+                    className="rounded-full border border-sky-500/15 bg-sky-500/5 px-2 py-1 text-[10px] text-sky-300"
+                  >
+                    天赋：{item}
+                  </span>
+                ))}
+              </div>
+              <div className="text-xs text-[hsl(var(--dim))] leading-6">
+                局终后获得的解锁会保留到下一次转世，并进入新的角色构建候选池。
+              </div>
+            </div>
+          )}
 
           <Dialog open={showSettings} onOpenChange={setShowSettings}>
             <DialogTrigger asChild>
@@ -249,14 +278,14 @@ export function StartScreen({ onStart, onContinue }: StartScreenProps) {
         <DialogContent className="ink-card border-[hsl(var(--ink-border))]">
           <DialogHeader>
             <DialogTitle className="text-foreground tracking-wider">
-              {player ? '确认重新转世？' : '踏入仙途'}
+              {hasSave ? '确认重新转世？' : '踏入仙途'}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-5">
             <p className="text-[hsl(var(--dim))] text-sm leading-relaxed">
-              {player
+              {hasSave
                 ? '当前存档将被清空，所有修行进度都会丢失。此操作不可撤销。'
-                : '准备好踏入九霄界，开启你的修仙传奇了吗？'}
+                : '准备好踏入九霄界，开启你的修仙传奇了吗？未配置模型时将回退为本地规则模式。'}
             </p>
             <div className="flex gap-3">
               <Button
@@ -267,47 +296,14 @@ export function StartScreen({ onStart, onContinue }: StartScreenProps) {
                 取消
               </Button>
               <Button
-                className={`flex-1 ${player ? 'bg-red-600/80 hover:bg-red-600' : 'btn-jade'} text-white`}
+                className={`flex-1 ${hasSave ? 'bg-red-600/80 hover:bg-red-600' : 'btn-jade'} text-white`}
                 onClick={handleConfirmNew}
               >
-                {player ? (
+                {hasSave ? (
                   <><Trash2 className="w-4 h-4 mr-2" />确认转世</>
                 ) : (
                   '踏入仙途'
                 )}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* 未配置模型提示 */}
-      <Dialog open={showNoModel} onOpenChange={setShowNoModel}>
-        <DialogContent className="ink-card border-[hsl(var(--ink-border))]">
-          <DialogHeader>
-            <DialogTitle className="text-foreground flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-amber-400" />
-              请先配置模型
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-5">
-            <p className="text-[hsl(var(--dim))] text-sm leading-relaxed">
-              游戏需要 AI 模型驱动，请先在「天道设置」中配置 API Key 和模型信息后再踏入仙途。
-            </p>
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                className="flex-1 border-[hsl(var(--ink-border))] text-[hsl(var(--dim))] hover:text-foreground"
-                onClick={() => setShowNoModel(false)}
-              >
-                关闭
-              </Button>
-              <Button
-                className="flex-1 bg-blue-600/80 hover:bg-blue-600 text-white"
-                onClick={() => { setShowNoModel(false); setShowSettings(true) }}
-              >
-                <Settings className="w-4 h-4 mr-2" />
-                前往设置
               </Button>
             </div>
           </div>

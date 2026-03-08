@@ -1,116 +1,95 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { StartScreen } from './components/StartScreen'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { CharacterCreationScreen } from './components/CharacterCreationScreen'
 import { GameScreen } from './components/GameScreen'
-import { useGameStore, getNearbyNPCs } from './stores/useGameStore'
-import { useSettingsStore } from './stores/useSettingsStore'
-import { createLLMService } from './services/llmService'
-import { createGameService } from './services/gameService'
-import { db } from './services/db'
+import { StartScreen } from './components/StartScreen'
 import { Toaster } from '@/components/ui/sonner'
-import { toast } from 'sonner'
-import type { Player, NPC, NPCInteractResult } from './types/game'
-import type { Relationship } from '@/types/game'
-import { getFavorLevel } from './types/game'
+import { createGameService } from '@/services/gameService'
+import { createLLMService } from '@/services/llmService'
+import { createRunService } from '@/services/runService'
+import { db } from '@/services/db'
+import { isRunStateCompatible } from '@/services/runEngine'
+import { useGameStore } from '@/stores/useGameStore'
+import { useSettingsStore } from '@/stores/useSettingsStore'
+import type { Player } from '@/types/game'
+import type { RunState } from '@/types/run'
 
 function App() {
-  // 游戏阶段：start(主页) -> character_creation(角色创建) -> game(游戏主界面)
   const [gamePhase, setGamePhase] = useState<'start' | 'character_creation' | 'game'>('start')
   const [isLoading, setIsLoading] = useState(false)
-  const [actionSuggestions, setActionSuggestions] = useState<string[]>([])
 
-  // 同步主题到 <html> class
-  const { theme } = useSettingsStore()
+  const {
+    runState,
+    saveId,
+    metaProgress,
+    setPlayer,
+    setRunState,
+    updateLastSavedAt,
+    mergeMetaProgress,
+    resetGame,
+  } = useGameStore()
+  const { theme, llmConfig } = useSettingsStore()
+  const autoSaveInitialized = useRef(false)
+
   useEffect(() => {
     const root = document.documentElement
     root.classList.remove('light', 'dark')
     root.classList.add(theme)
   }, [theme])
 
-  // Store
-  const {
-    player,
-    npcs,
-    world,
-    logs,
-    saveId,
-    selectedNPCId,
-    isNPCInteracting,
-    setPlayer,
-    updatePlayer,
-    addNpc,
-    updateNpc,
-    updateNearbyNPCs,
-    addLog,
-    initWorld,
-    setWorld,
-    incrementTurn,
-    updateLastSavedAt,
-    setSelectedNPC,
-    setNPCInteracting,
-  } = useGameStore()
-
-  // 获取附近 NPC
-  const nearbyNPCs = getNearbyNPCs(npcs, world?.nearbyNPCs || [])
-  const selectedNPC = selectedNPCId ? npcs.find(n => n.id === selectedNPCId) || null : null
-
-  const { llmConfig } = useSettingsStore()
-
-  // 用于追踪是否已经初始化过自动存档
-  const autoSaveInitialized = useRef(false)
-
-  // 初始化 IndexedDB
   useEffect(() => {
-    db.init().catch(console.error)
-  }, [])
+    db.init()
+      .then(async () => {
+        const persistedRun = useGameStore.getState().runState
+        if (persistedRun && !isRunStateCompatible(persistedRun)) {
+          await db.clearAll()
+          resetGame()
+          toast.info('v2 重构已生效，旧存档已清理，请重新开始这一世修行。')
+        }
+      })
+      .catch(console.error)
+  }, [resetGame])
 
-  // 创建服务（用 useMemo 保证 llmConfig 不变时不重新创建实例）
-  const gameServiceWithMemory = useMemo(
-    () => createGameService(createLLMService(llmConfig)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [llmConfig.baseURL, llmConfig.apiKey, llmConfig.model]
+  const llmService = useMemo(
+    () => createLLMService(llmConfig),
+    [llmConfig],
   )
 
-  // 自动存档功能
+  const characterService = useMemo(
+    () => createGameService(llmService),
+    [llmService],
+  )
+
+  const runService = useMemo(
+    () => createRunService(llmService),
+    [llmService],
+  )
+
   const autoSave = useCallback(async () => {
-    if (!player || !saveId) return
+    if (!saveId) return
 
     try {
       const gameState = useGameStore.getState()
-      const saveData = {
+      await db.saveSaveData({
         saveId,
         data: {
           player: gameState.player,
-          npcs: gameState.npcs,
-          world: gameState.world,
-          logs: gameState.logs,
-          events: gameState.events,
-          memories: gameState.memories,
-          memorySummary: gameState.memorySummary,
-          turn: gameState.turn,
-          isPlaying: gameState.isPlaying,
-          isLoading: gameState.isLoading,
-          error: gameState.error,
-          selectedNPCId: gameState.selectedNPCId,
-          isNPCInteracting: gameState.isNPCInteracting,
+          runState: gameState.runState,
+          metaProgress: gameState.metaProgress,
+          saveId: gameState.saveId,
+          lastSavedAt: Date.now(),
         },
-      }
-
-      await db.saveSaveData(saveData)
+      })
       updateLastSavedAt()
-      console.log('自动存档成功')
     } catch (error) {
       console.error('自动存档失败:', error)
     }
-  }, [player, saveId, updateLastSavedAt])
+  }, [saveId, updateLastSavedAt])
 
-  // 设置自动存档（每30秒自动保存一次，以及每次行动后）
   useEffect(() => {
-    if (gamePhase !== 'game' || autoSaveInitialized.current) return
+    if (gamePhase !== 'game' || !runState || autoSaveInitialized.current) return
 
     autoSaveInitialized.current = true
-
-    // 每30秒自动保存
     const intervalId = setInterval(() => {
       autoSave()
     }, 30000)
@@ -119,433 +98,153 @@ function App() {
       clearInterval(intervalId)
       autoSaveInitialized.current = false
     }
-  }, [gamePhase, autoSave])
+  }, [autoSave, gamePhase, runState])
 
-  // 从主页开始新游戏
+  const startRun = useCallback(
+    async (character: Player, existingRun?: RunState) => {
+      setIsLoading(true)
+
+      try {
+        const nextSaveId = saveId || `save_${Date.now()}`
+        if (!saveId) {
+          useGameStore.setState({ saveId: nextSaveId })
+        }
+
+        const baseRun = existingRun ?? runService.createRun(character, metaProgress)
+        const preparedRun = await runService.prepareTurn(baseRun)
+
+        setPlayer(character)
+        setRunState(preparedRun)
+        setGamePhase('game')
+
+        if (llmService.isConfigured()) {
+          toast.success('修仙之旅开始')
+        } else {
+          toast.info('进入本地规则模式，未配置模型时也可继续游玩')
+        }
+
+        await autoSave()
+      } catch (error) {
+        console.error('初始化新玩法失败:', error)
+        toast.error('初始化玩法失败，请重试')
+      } finally {
+        setIsLoading(false)
+      }
+    },
+    [autoSave, llmService, metaProgress, runService, saveId, setPlayer, setRunState],
+  )
+
   const handleStartFromHome = useCallback(() => {
     setGamePhase('character_creation')
-    setActionSuggestions([])
   }, [])
 
-  // 继续游戏
   const handleContinueGame = useCallback(async () => {
-    if (!player) return
-
     setIsLoading(true)
+
     try {
-      // 如果有存档ID，尝试从IndexedDB加载完整数据
+      let loadedRun = useGameStore.getState().runState
+      let loadedPlayer = useGameStore.getState().player
+
       if (saveId) {
         const savedData = await db.getSaveData(saveId)
-        if (savedData?.data) {
-          // 恢复游戏状态
-          const state = useGameStore.getState()
-          state.loadGame(savedData.data)
+        const savedPayload = savedData?.data as
+          | {
+              player?: Player
+              runState?: RunState
+              metaProgress?: typeof metaProgress
+            }
+          | undefined
+
+        if (savedPayload?.player) {
+          loadedPlayer = savedPayload.player
+          setPlayer(savedPayload.player)
+        }
+
+        if (savedPayload?.runState) {
+          if (!isRunStateCompatible(savedPayload.runState)) {
+            await db.clearAll()
+            resetGame()
+            toast.info('检测到旧版存档，已按 v2 规则清理，请重新开始。')
+            return
+          }
+          loadedRun = savedPayload.runState
+          setRunState(savedPayload.runState)
+        }
+
+        if (savedPayload?.metaProgress) {
+          mergeMetaProgress(savedPayload.metaProgress)
         }
       }
 
-      // 初始化游戏服务
-      const currentSaveId = saveId || `save_${Date.now()}`
-      if (!saveId) {
-        useGameStore.setState({ saveId: currentSaveId })
+      if (!loadedPlayer) {
+        toast.error('没有可继续的角色')
+        return
       }
 
-      gameServiceWithMemory.initialize(currentSaveId)
-      setGamePhase('game')
-      toast.success('欢迎回来，道友！')
-    } catch (error) {
-      console.error('加载游戏失败:', error)
-      toast.error('加载存档失败')
+      await startRun(loadedPlayer, loadedRun ?? undefined)
     } finally {
       setIsLoading(false)
     }
-  }, [player, saveId, gameServiceWithMemory])
+  }, [mergeMetaProgress, resetGame, saveId, setPlayer, setRunState, startRun])
 
-  // 返回主页
   const handleReturnHome = useCallback(() => {
-    // 先自动保存当前进度
-    autoSave().then(() => {
+    autoSave().finally(() => {
       setGamePhase('start')
-      toast.info('已返回主页')
     })
   }, [autoSave])
 
-  // 选择角色开始游戏
   const handleSelectCharacter = useCallback(
     async (character: Player) => {
-      setPlayer(character)
+      await startRun(character)
+    },
+    [startRun],
+  )
 
-      // 初始化世界
-      const initialWorld = initWorld()
-      setWorld(initialWorld)
+  const handleAction = useCallback(
+    async (actionId: string, rawInput?: string) => {
+      if (!runState) return
 
-      // 初始化游戏服务
-      const newSaveId = `save_${Date.now()}`
-      useGameStore.setState({ saveId: newSaveId })
-      gameServiceWithMemory.initialize(newSaveId)
-
-      setGamePhase('game')
-      toast.success('修仙之旅开始！')
-
-      // 自动生成初始剧情
       setIsLoading(true)
-      try {
-        // 生成初始 NPC
-        const initialNPCs = await gameServiceWithMemory.generateLocationNPCs(
-          initialWorld.currentLocation,
-          initialWorld.locationDescription || '灵气氤氲之地',
-          character,
-          3
-        )
 
-        // 添加 NPC 到 store
-        for (const npc of initialNPCs) {
-          addNpc(npc)
+      try {
+        const nextRun = await runService.submitAction(runState, actionId, rawInput)
+        setRunState(nextRun)
+
+        if (nextRun.phase === 'game_over') {
+          mergeMetaProgress(nextRun.meta)
+          toast.info('本局修行结束，可重新转世再战')
         }
 
-        // 更新附近 NPC 列表
-        updateNearbyNPCs(initialNPCs.map(npc => npc.id))
-
-        const result = await gameServiceWithMemory.generateStory(
-          character,
-          initialWorld,
-          [],
-          '我睁开双眼，发现自己身处一个陌生的世界。'
-        )
-
-        // 添加初始剧情
-        addLog({
-          type: 'event',
-          content: result.story,
-        })
-
-        // 更新行动建议
-        setActionSuggestions(result.suggestedActions || [])
-
-        // 首次自动存档
         await autoSave()
       } catch (error) {
-        console.error('初始剧情生成失败:', error)
-        addLog({
-          type: 'system',
-          content: '**天道紊乱**：天机推演受阻，请道友稍后再试。',
-        })
+        console.error('行动结算失败:', error)
+        const message = error instanceof Error ? error.message : '未知错误'
+        toast.error(`行动结算失败：${message}`)
       } finally {
         setIsLoading(false)
       }
     },
-    [setPlayer, initWorld, setWorld, addLog, addNpc, updateNearbyNPCs, gameServiceWithMemory, autoSave]
+    [autoSave, mergeMetaProgress, runService, runState, setRunState],
   )
 
-  // 处理玩家行动
-  const handleActionSubmit = useCallback(
-    async (action: string) => {
-      if (!player || !world) return
-
-      setIsLoading(true)
-
-      // 添加玩家行动日志
-      addLog({
-        type: 'action',
-        content: `你决定：${action}`,
-      })
-
-      try {
-        incrementTurn()
-
-        // 生成剧情
-        const result = await gameServiceWithMemory.generateStory(player, world, logs, action)
-
-        // 更新玩家状态
-        const updatedPlayer = { ...player }
-
-        // 应用属性变化
-        if (result.statChanges) {
-          if (result.statChanges.health)
-            updatedPlayer.health = Math.max(
-              0,
-              Math.min(updatedPlayer.maxHealth, updatedPlayer.health + result.statChanges.health)
-            )
-          if (result.statChanges.maxHealth) updatedPlayer.maxHealth += result.statChanges.maxHealth
-          if (result.statChanges.spiritualPower)
-            updatedPlayer.spiritualPower = Math.max(
-              0,
-              Math.min(
-                updatedPlayer.maxSpiritualPower,
-                updatedPlayer.spiritualPower + result.statChanges.spiritualPower
-              )
-            )
-          if (result.statChanges.maxSpiritualPower)
-            updatedPlayer.maxSpiritualPower += result.statChanges.maxSpiritualPower
-          if (result.statChanges.attack) updatedPlayer.attack += result.statChanges.attack
-          if (result.statChanges.defense) updatedPlayer.defense += result.statChanges.defense
-          if (result.statChanges.speed) updatedPlayer.speed += result.statChanges.speed
-          if (result.statChanges.luck) updatedPlayer.luck += result.statChanges.luck
-          if (result.statChanges.lifespan) updatedPlayer.lifespan += result.statChanges.lifespan
-          if (result.statChanges.rootBone) updatedPlayer.rootBone += result.statChanges.rootBone
-          if (result.statChanges.comprehension) updatedPlayer.comprehension += result.statChanges.comprehension
-          if (result.statChanges.karma) updatedPlayer.karma += result.statChanges.karma
-        }
-
-        // 更新时间（带安全默认值，防止NaN）
-        const timePassed = result.timePassed || { year: 0, month: 0, day: 0 }
-        const yearsPassed = Number(timePassed.year) || 0
-        const monthsPassed = Number(timePassed.month) || 0
-        const daysPassed = Number(timePassed.day) || 0
-
-        updatedPlayer.age += yearsPassed + monthsPassed / 12 + daysPassed / 365
-
-        // 消耗寿元
-        const lifespanCost = yearsPassed * 1 + monthsPassed * 0.1 + daysPassed * 0.01
-        updatedPlayer.lifespan -= lifespanCost
-
-        // 增加修为（带安全检查）
-        const cultivationGained = Number(result.cultivationGained) || 0
-        updatedPlayer.cultivationProgress += cultivationGained
-        if (updatedPlayer.cultivationProgress >= 100) {
-          updatedPlayer.cultivationProgress = 100
-        }
-
-        // 增加灵气（带安全检查）
-        const spiritualEnergyGained = Number(result.spiritualEnergyGained) || 0
-        updatedPlayer.spiritualEnergy += spiritualEnergyGained
-
-        // 处理突破（带安全检查）
-        const breakthrough = result.breakthrough || { occurred: false, success: false }
-        if (breakthrough.occurred && breakthrough.success) {
-          updatedPlayer.realm = (breakthrough.newRealm as Player['realm']) || updatedPlayer.realm
-          updatedPlayer.minorRealm = (breakthrough.newMinorRealm as Player['minorRealm']) || updatedPlayer.minorRealm
-          updatedPlayer.cultivationProgress = 0
-
-          // 增加寿元上限
-          const realmLifespanBonus: Record<string, number> = {
-            炼气期: 150,
-            筑基期: 300,
-            金丹期: 500,
-            元婴期: 1000,
-            化神期: 2000,
-            炼虚期: 5000,
-            合体期: 10000,
-            大乘期: 50000,
-            渡劫期: 99999,
-          }
-          const newMaxLifespan = realmLifespanBonus[updatedPlayer.realm] || 100
-          // 寿元增加新上限与原上限的差值的一半（突破延寿）
-          const lifespanIncrease = (newMaxLifespan - updatedPlayer.maxLifespan) * 0.5
-          updatedPlayer.maxLifespan = newMaxLifespan
-          updatedPlayer.lifespan = Math.min(updatedPlayer.maxLifespan, updatedPlayer.lifespan + lifespanIncrease)
-        }
-
-        // 添加获得的物品
-        if (result.itemsGained?.length > 0) {
-          updatedPlayer.inventory = [...(updatedPlayer.inventory || []), ...result.itemsGained]
-        }
-
-        // 移除失去的物品
-        if (result.itemsLost?.length > 0 && updatedPlayer.inventory) {
-          updatedPlayer.inventory = updatedPlayer.inventory.filter(
-            (item) =>
-              !result.itemsLost?.some(
-                (lostItem) => item.name === lostItem || item.id === lostItem
-              )
-          )
-        }
-
-        // 添加获得的技能
-        if (result.skillsGained?.length > 0) {
-          updatedPlayer.skills = [...(updatedPlayer.skills || []), ...result.skillsGained]
-        }
-
-        // 提升已有技能
-        if (result.skillsImproved?.length > 0 && updatedPlayer.skills) {
-          updatedPlayer.skills = updatedPlayer.skills.map((skill) => {
-            if (
-              result.skillsImproved?.includes(skill.name) &&
-              skill.level < skill.maxLevel
-            ) {
-              return { ...skill, level: skill.level + 1 }
-            }
-            return skill
-          })
-        }
-
-        // 更新 NPC 关系
-        if (result.npcsMet?.length > 0) {
-          const newRelationships = { ...(updatedPlayer.relationships || {}) }
-          for (const npc of result.npcsMet) {
-            const npcId = npc.id || Math.random().toString(36).substring(2, 15)
-            const existingRelationship = newRelationships[npc.name]
-            // 使用新的 NPC 类型中的 favor 属性，默认 0
-            const relationshipChange = (npc as NPC).favor || 0
-
-            if (existingRelationship) {
-              existingRelationship.favorability += relationshipChange
-              existingRelationship.lastInteractionAt = Date.now()
-              existingRelationship.interactionCount =
-                (existingRelationship.interactionCount || 0) + 1
-              existingRelationship.history = [
-                ...(existingRelationship.history || []),
-                `在${world?.currentLocation || '某地'}相遇`,
-              ]
-            } else {
-              newRelationships[npc.name] = {
-                npcId: npcId,
-                npcName: npc.name,
-                npcEmoji: npc.avatar || npc.emoji,
-                npcIdentity: npc.identity || '未知身份',
-                level: '中立',
-                favorability: relationshipChange,
-                description: npc.description || `在修仙路上结识的${npc.identity || '修士'}`,
-                firstMetAt: Date.now(),
-                lastInteractionAt: Date.now(),
-                interactionCount: 1,
-                tags: [],
-                notes: '',
-                history: [],
-              }
-            }
-          }
-          updatedPlayer.relationships = newRelationships
-        }
-
-        // 应用关系更新
-        if (result.relationshipsUpdate) {
-          const newRelationships = { ...(updatedPlayer.relationships || {}) }
-          for (const [npcName, update] of Object.entries(result.relationshipsUpdate)) {
-            if (newRelationships[npcName]) {
-              newRelationships[npcName].favorability += update.favorabilityChange
-              newRelationships[npcName].lastInteractionAt = Date.now()
-              if (update.newLevel) {
-                newRelationships[npcName].level = update.newLevel as Relationship['level']
-              }
-            }
-          }
-          updatedPlayer.relationships = newRelationships
-        }
-
-        // 记录成长历史
-        updatedPlayer.growthHistory = [
-          ...(updatedPlayer.growthHistory || []),
-          `[${Math.floor(updatedPlayer.age)}岁 ${updatedPlayer.realm}·${updatedPlayer.minorRealm} ${updatedPlayer.cultivationProgress.toFixed(1)}%] ${result.story.slice(0, 100)}...`,
-        ]
-
-        // 保存更新后的玩家状态
-        updatePlayer(updatedPlayer)
-
-        // 添加剧情日志
-        addLog({
-          type: 'event',
-          content: result.story,
-        })
-
-        // 记录事件
-        if (result.events.length > 0) {
-          for (const event of result.events) {
-            addLog({
-              type: 'system',
-              content: `【事件】${event}`,
-            })
-          }
-        }
-
-        // 更新行动建议
-        setActionSuggestions(result.suggestedActions || [])
-
-        // 触发自动存档
-        await autoSave()
-      } catch (error) {
-        console.error('生成剧情失败:', error)
-        const errorMessage = error instanceof Error ? error.message : '天机难测'
-        addLog({
-          type: 'system',
-          content: `**天道反噬**：推演受阻（${errorMessage}）。请道友稍后再试，或换个思路。`,
-        })
-        toast.error('天道推演失败，请稍后再试')
-      } finally {
-        setIsLoading(false)
-      }
+  const handleSelectAction = useCallback(
+    async (actionId: string) => {
+      await handleAction(actionId)
     },
-    [player, world, logs, updatePlayer, addLog, incrementTurn, autoSave]
+    [handleAction],
   )
 
-  // NPC 相关处理方法
-  const handleSelectNPC = useCallback((npc: NPC) => {
-    setSelectedNPC(npc.id)
-    setNPCInteracting(true)
-  }, [setSelectedNPC, setNPCInteracting])
+  const handleCustomAction = useCallback(
+    async (rawInput: string) => {
+      if (!runState) return
 
-  const handleCloseNPCModal = useCallback(() => {
-    setNPCInteracting(false)
-    setSelectedNPC(null)
-  }, [setNPCInteracting, setSelectedNPC])
+      const customActionId =
+        runState.currentOptions.find((option) => option.kind === 'custom')?.id ?? 'custom'
 
-  const handleNPCInteract = useCallback(async (action: string): Promise<NPCInteractResult> => {
-    if (!selectedNPC || !player || !world) {
-      throw new Error('缺少必要的数据')
-    }
-
-    const result = await gameServiceWithMemory.interactWithNPC(
-      selectedNPC,
-      player,
-      world.currentLocation,
-      action
-    )
-
-    // 更新 NPC 状态
-    if (result.npcStateDelta) {
-      const updates: Partial<NPC> = {}
-      if (result.npcStateDelta.favor !== undefined) {
-        updates.favor = selectedNPC.favor + result.npcStateDelta.favor
-        updates.favorLevel = getFavorLevel(updates.favor)
-      }
-      if (result.npcStateDelta.revealedAttributes !== undefined) {
-        updates.revealedAttributes = result.npcStateDelta.revealedAttributes
-      }
-      if (result.npcStateDelta.memoryTags) {
-        updates.memoryTags = [...selectedNPC.memoryTags, ...result.npcStateDelta.memoryTags]
-      }
-      if (result.npcStateDelta.relationshipDesc) {
-        updates.relationshipDesc = result.npcStateDelta.relationshipDesc
-      }
-      updateNpc(selectedNPC.id, updates)
-    }
-
-    // 更新玩家状态
-    if (result.playerStateDelta) {
-      const playerUpdates: Partial<Player> = {}
-      if (result.playerStateDelta.health) {
-        playerUpdates.health = Math.max(0, player.health + result.playerStateDelta.health)
-      }
-      if (result.playerStateDelta.spiritualPower) {
-        playerUpdates.spiritualPower = Math.max(0, player.spiritualPower + result.playerStateDelta.spiritualPower)
-      }
-      if (result.playerStateDelta.itemsGained) {
-        playerUpdates.inventory = [...(player.inventory || []), ...result.playerStateDelta.itemsGained]
-      }
-      updatePlayer(playerUpdates)
-    }
-
-    // 添加剧情更新
-    if (result.storyUpdate) {
-      addLog({
-        type: 'event',
-        content: result.storyUpdate,
-      })
-    }
-
-    // 更新时间
-    if (result.timePassed) {
-      const updatedPlayer = { ...player }
-      const yearsPassed = Number(result.timePassed.year) || 0
-      const monthsPassed = Number(result.timePassed.month) || 0
-      const daysPassed = Number(result.timePassed.day) || 0
-      updatedPlayer.age += yearsPassed + monthsPassed / 12 + daysPassed / 365
-      const lifespanCost = yearsPassed * 1 + monthsPassed * 0.1 + daysPassed * 0.01
-      updatedPlayer.lifespan -= lifespanCost
-      updatePlayer(updatedPlayer)
-    }
-
-    return result
-  }, [selectedNPC, player, world, gameServiceWithMemory, updateNpc, updatePlayer, addLog])
+      await handleAction(customActionId, rawInput)
+    },
+    [handleAction, runState],
+  )
 
   return (
     <div className="min-h-screen bg-background">
@@ -555,27 +254,19 @@ function App() {
 
       {gamePhase === 'character_creation' && (
         <CharacterCreationScreen
-          gameService={gameServiceWithMemory}
+          gameService={characterService}
           onSelectCharacter={handleSelectCharacter}
           onReturnHome={handleReturnHome}
         />
       )}
 
-      {gamePhase === 'game' && player && (
+      {gamePhase === 'game' && runState && (
         <GameScreen
-          player={player}
-          world={world}
-          logs={logs}
+          runState={runState}
           isLoading={isLoading}
-          suggestions={actionSuggestions}
-          onActionSubmit={handleActionSubmit}
+          onSelectAction={handleSelectAction}
+          onCustomAction={handleCustomAction}
           onReturnHome={handleReturnHome}
-          nearbyNPCs={nearbyNPCs}
-          selectedNPC={selectedNPC}
-          isNPCInteracting={isNPCInteracting}
-          onSelectNPC={handleSelectNPC}
-          onCloseNPCModal={handleCloseNPCModal}
-          onNPCInteract={handleNPCInteract}
         />
       )}
 

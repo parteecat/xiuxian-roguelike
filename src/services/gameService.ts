@@ -396,7 +396,7 @@ export class GameService {
 
     const saveData = {
       saveId: this.saveId,
-      data: state,
+      data: state as unknown as Record<string, unknown>,
     }
 
     await db.saveSaveData(saveData)
@@ -405,7 +405,7 @@ export class GameService {
   // 加载游戏状态
   async loadGame(saveId: string): Promise<GameState | null> {
     const saveData = await db.getSaveData(saveId)
-    return saveData?.data || null
+    return (saveData?.data as unknown as GameState) || null
   }
 
   private generateId(): string {
